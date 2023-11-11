@@ -1,9 +1,6 @@
 use std::{borrow::BorrowMut, vec};
 
-use crate::parser::{
-    parser::Parsers,
-    token::{match_binop_precedence, TokenTypes},
-};
+use crate::parser::{parser::Parsers, token::TokenTypes};
 
 use self::expr::*;
 
@@ -191,7 +188,7 @@ impl<'a> ExpressionHandler<'a> {
             if let Undefined = token_type {
                 panic!("纯纯的脑瘫语法错误")
             } else {
-                self.current_type = token_type;
+                self.current_type = token_type.clone();
                 token_type
             }
         } else if self.raw_iter.next() == None {

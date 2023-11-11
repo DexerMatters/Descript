@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenTypes {
     End,
 
@@ -85,21 +85,22 @@ pub enum TokenTypes {
 }
 
 use TokenTypes::*;
+
 pub fn match_binop_precedence(t: &TokenTypes) -> Option<i16> {
     match *t {
-        ParenL | ParenR | BracketL | BracketR | Dot => 13,
-        Not | Pos | Neg => 12,
-        Mul | Div | Mod => 11,
-        Add | Sub => 10,
-        BinaryShiftL | BinaryShiftR => 9,
-        Less | LoE | Greater | GoE => 8,
-        Equal | Inequal => 7,
-        BinaryAnd => 6,
-        BinaryXor => 5,
-        BinaryOr => 4,
-        And => 3,
-        Or => 2,
-        As | Inc | Dec | MulAs | DivAs | ModAs | AndAs | XorAs | OrAs => 1,
+        ParenL | ParenR | BracketL | BracketR | Dot => Some(13),
+        Not | Pos | Neg => Some(12),
+        Mul | Div | Mod => Some(11),
+        Add | Sub => Some(10),
+        BinaryShiftL | BinaryShiftR => Some(9),
+        Less | LoE | Greater | GoE => Some(8),
+        Equal | Inequal => Some(7),
+        BinaryAnd => Some(6),
+        BinaryXor => Some(5),
+        BinaryOr => Some(4),
+        And => Some(3),
+        Or => Some(2),
+        As | Inc | Dec | MulAs | DivAs | ModAs | AndAs | XorAs | OrAs => Some(1),
         _ => None,
     }
 }
