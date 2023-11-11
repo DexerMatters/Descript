@@ -10,7 +10,7 @@ pub struct VariableExprAST {
     pub name: String,
 }
 pub struct BinaryExprAST {
-    pub name: String,
+    pub typ: TokenTypes,
     pub lhs: Box<dyn ExprAST>,
     pub rhs: Box<dyn ExprAST>,
 }
@@ -28,6 +28,8 @@ pub struct FunctionAST {
     pub proto: Box<PrototypeAST>,
     pub body: Box<dyn ExprAST>,
 }
+
+pub struct ErrorAST;
 
 pub struct ExpressionHandler<'a> {
     pub raw_iter: Peekable<Chars<'a>>,

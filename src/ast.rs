@@ -1,9 +1,11 @@
-use crate::parser::token::TokenTypes;
+use std::{borrow::BorrowMut, vec};
 
-use self::expr::{
-    BinaryExprAST, CallExprAST, ExprAST, ExpressionHandler, FunctionAST, NumberExprAST,
-    PrototypeAST, VariableExprAST,
+use crate::parser::{
+    parser::Parsers,
+    token::{match_binop_precedence, TokenTypes},
 };
+
+use self::expr::*;
 
 use TokenTypes::*;
 
@@ -16,6 +18,7 @@ impl ExprAST for BinaryExprAST {}
 impl ExprAST for VariableExprAST {}
 impl ExprAST for CallExprAST {}
 impl ExprAST for PrototypeAST {}
+impl ExprAST for ErrorAST {}
 
 type String_ = std::string::String;
 
@@ -30,8 +33,8 @@ impl VariableExprAST {
     }
 }
 impl BinaryExprAST {
-    pub fn new(name: String_, lhs: Box<dyn ExprAST>, rhs: Box<dyn ExprAST>) -> Self {
-        Self { name, lhs, rhs }
+    pub fn new(typ: TokenTypes, lhs: Box<dyn ExprAST>, rhs: Box<dyn ExprAST>) -> Self {
+        Self { typ, lhs, rhs }
     }
 }
 impl CallExprAST {
@@ -78,7 +81,7 @@ impl<'a> ExpressionHandler<'a> {
         }
     }
 
-    pub fn next_token(&mut self) {
+    pub fn next_token(&mut self) -> TokenTypes {
         macro_rules! match_bi {
             ($res0: expr, $({$val:expr ,$res:expr}),*) => {{
                 println!("{:?}", self.raw_iter.peek());
@@ -95,7 +98,7 @@ impl<'a> ExpressionHandler<'a> {
 
         let token = match self.raw_iter.next().unwrap() {
             c @ (' ' | '\n' | '\t' | '\r') => {
-                if c == '\r' || c == '\n' {
+                if matches!(c, '\n' | '\t') {
                     self.current_pos.0 += 1;
                 }
                 None
@@ -112,9 +115,7 @@ impl<'a> ExpressionHandler<'a> {
             }
 
             // check symbols
-            '=' => {
-                match_bi!(As, {'=', Equal}, {'>', Arrow})
-            }
+            '=' => match_bi!(As, {'=', Equal}, {'>', Arrow}),
 
             '+' => match_bi!(Add, {'=', Inc}),
             '-' => match_bi!(Add, {'=', Dec}),
@@ -134,8 +135,13 @@ impl<'a> ExpressionHandler<'a> {
             ':' => Some(Colon),
             ';' => Some(Semicolon),
 
-            '&' => match_bi!(BinaryAnd, {'&', And}),
-            '|' => match_bi!(BinaryOr, {'|', Or}),
+            '<' => match_bi!(Less, {'=', LoE}, {'<', ShiftLAs}),
+            '>' => match_bi!(Greater, {'=', GoE}, {'>', ShiftRAs}),
+
+            '&' => match_bi!(BinaryAnd, {'&', And}, {'=', AndAs}),
+            '|' => match_bi!(BinaryOr, {'|', Or}, {'=', OrAs}),
+            '^' => match_bi!(BinaryXor, {'=', XorAs}),
+            '!' => match_bi!(Not, {'=', Inequal}),
 
             // check keywords and ids
             c @ ('a'..='z' | 'A'..='Z') => {
@@ -154,12 +160,11 @@ impl<'a> ExpressionHandler<'a> {
 
             // check numbers
             c if {
-                c.is_numeric()
-                    || (['-', '+', '.'].contains(&c)
-                        && self
-                            .raw_iter
-                            .peek()
-                            .is_some_and(|x| x.is_numeric() || *x == '.'))
+                matches!(c, '0'..='9' | '.' | '-' | '+')
+                    && self
+                        .raw_iter
+                        .peek()
+                        .is_some_and(|x| x.is_numeric() || *x == '.')
             } =>
             {
                 let mut value = String_::from(c);
@@ -187,74 +192,14 @@ impl<'a> ExpressionHandler<'a> {
                 panic!("纯纯的脑瘫语法错误")
             } else {
                 self.current_type = token_type;
+                token_type
             }
         } else if self.raw_iter.next() == None {
             self.current_type = End;
+            End
         } else {
             self.next_token()
         }
-    }
-
-    /// numberexpr ::= number
-    pub fn next_parse_number_expr(&mut self) -> Box<dyn ExprAST> {
-        let result = NumberExprAST::new(self.current_value_number);
-        self.next_token();
-        Box::new(result)
-    }
-
-    /// parenexpr ::= '(' expression ')'
-    pub fn next_parse_paren_expr(&mut self) -> Box<dyn ExprAST> {
-        self.next_token();
-        let result = self.parse_expression();
-        if let ParenR = self.current_type {
-            self.next_token();
-            result
-        } else {
-            todo!("Error Handler")
-        }
-    }
-
-    pub fn next_parse_identifier_expr(&mut self) -> Box<dyn ExprAST> {
-        let name = self.current_value_string.clone();
-        self.next_token();
-        if let ParenL = self.current_type {
-            // Call Expr
-            self.next_token();
-            let mut args = Vec::<Box<dyn ExprAST>>::new();
-            if let ParenR = self.current_type {
-                Box::new(CallExprAST::new(name, args))
-            } else {
-                loop {
-                    let arg = self.parse_expression();
-                    args.push(arg);
-                    if let ParenR = self.current_type {
-                        break;
-                    }
-                    if let Comma = self.current_type {
-                    } else {
-                        todo!("Error Handle")
-                    }
-                    self.next_token();
-                }
-                Box::new(CallExprAST::new(name, args))
-            }
-        } else {
-            // Var Expr
-            Box::new(VariableExprAST::new(name))
-        }
-    }
-
-    pub fn parse_primary(&mut self) -> Box<dyn ExprAST> {
-        match self.current_type {
-            Identifier => self.next_parse_identifier_expr(),
-            Number => self.next_parse_number_expr(),
-            ParenL => self.next_parse_paren_expr(),
-            _ => todo!("Handle Error"),
-        }
-    }
-
-    pub fn parse_expression(&mut self) -> Box<dyn ExprAST> {
-        todo!("")
     }
 
     pub fn analyze(&self) {}
