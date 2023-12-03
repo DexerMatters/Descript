@@ -1,21 +1,54 @@
-use std::{borrow::BorrowMut, vec};
+use std::{
+    cell::{RefCell, RefMut},
+    rc::{self, Rc},
+};
 
-use crate::parser::{parser::Parsers, token::TokenTypes};
+use crate::{
+    compiler::codegen::Codegen,
+    parser::{parser::Parsers, token::TokenTypes},
+};
 
 use self::expr::*;
 
+use inkwell::{
+    context::{AsContextRef, Context, ContextRef},
+    values::AnyValue,
+};
 use TokenTypes::*;
 
-pub mod db;
 pub mod expr;
 pub mod value;
 
-impl ExprAST for NumberExprAST {}
-impl ExprAST for BinaryExprAST {}
-impl ExprAST for VariableExprAST {}
-impl ExprAST for CallExprAST {}
-impl ExprAST for PrototypeAST {}
-impl ExprAST for ErrorAST {}
+impl ExprAST for NumberExprAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
+impl ExprAST for BinaryExprAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
+impl ExprAST for VariableExprAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
+impl ExprAST for CallExprAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
+impl ExprAST for PrototypeAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
+impl ExprAST for ErrorAST {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>> {
+        todo!()
+    }
+}
 
 type String_ = std::string::String;
 
@@ -58,6 +91,7 @@ impl<'a> ExpressionHandler<'a> {
             current_value_number: 0f64,
             current_value_string: String_::new(),
             current_type: Undefined,
+            compiler_context: None,
         }
     }
     fn token_matches(&mut self, x: String_) -> TokenTypes {

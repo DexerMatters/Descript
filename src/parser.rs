@@ -1,32 +1,40 @@
-use crate::ast::expr::*;
+use std::{cell::RefCell, rc::Rc};
 
 use self::{
     parser::Parsers,
     token::{match_binop_precedence, TokenTypes},
 };
+use crate::compiler::*;
+use crate::{ast::expr::*, compiler::codegen::Codegen};
 
 pub mod parser;
 pub mod token;
 
-type String_ = std::string::String;
-
+macro_rules! HANDLER {
+    ($self:expr) => {
+        $self
+            .compiler_context
+            .as_ref()
+            .unwrap()
+            .clone()
+            .borrow_mut()
+            .expression_handler
+    };
+}
 impl<'a> Parsers<'a> {
-    pub fn new(handler: &'a mut ExpressionHandler<'a>) -> Self {
-        Self { handler }
-    }
     /// numberexpr ::= number
     pub fn parse_number_expr(&mut self) -> Box<dyn ExprAST> {
-        let result = NumberExprAST::new(self.handler.current_value_number);
-        self.handler.next_token();
+        let result = NumberExprAST::new(HANDLER!(self).current_value_number);
+        HANDLER!(self).next_token();
         Box::new(result)
     }
 
     /// parenexpr ::= '(' expression ')'
     pub fn parse_paren_expr(&mut self) -> Box<dyn ExprAST> {
-        self.handler.next_token();
+        HANDLER!(self).next_token();
         let result = self.parse_expression();
-        if matches!(&self.handler.current_type, TokenTypes::ParenR) {
-            self.handler.next_token();
+        if matches!(&HANDLER!(self).current_type, TokenTypes::ParenR) {
+            HANDLER!(self).next_token();
             result
         } else {
             todo!("Error Handler")
@@ -34,25 +42,25 @@ impl<'a> Parsers<'a> {
     }
 
     pub fn parse_identifier_expr(&mut self) -> Box<dyn ExprAST> {
-        let name = self.handler.current_value_string.clone();
-        self.handler.next_token();
-        if matches!(&self.handler.current_type, TokenTypes::ParenL) {
+        let name = HANDLER!(self).current_value_string.clone();
+        HANDLER!(self).next_token();
+        if matches!(&HANDLER!(self).current_type, TokenTypes::ParenL) {
             // Call Expr
-            self.handler.next_token();
+            HANDLER!(self).next_token();
             let mut args = Vec::<Box<dyn ExprAST>>::new();
-            if matches!(&self.handler.current_type, TokenTypes::ParenR) {
+            if matches!(&HANDLER!(self).current_type, TokenTypes::ParenR) {
                 Box::new(CallExprAST::new(name, args))
             } else {
                 loop {
                     let arg = self.parse_expression();
                     args.push(arg);
-                    if matches!(&self.handler.current_type, TokenTypes::ParenR) {
+                    if matches!(&HANDLER!(self).current_type, TokenTypes::ParenR) {
                         break;
                     }
-                    if !matches!(&self.handler.current_type, TokenTypes::Comma) {
+                    if !matches!(&HANDLER!(self).current_type, TokenTypes::Comma) {
                         todo!("Error Handle")
                     }
-                    self.handler.next_token();
+                    HANDLER!(self).next_token();
                 }
                 Box::new(CallExprAST::new(name, args))
             }
@@ -63,7 +71,7 @@ impl<'a> Parsers<'a> {
     }
 
     pub fn parse_primary(&mut self) -> Box<dyn ExprAST> {
-        match &self.handler.current_type {
+        match &HANDLER!(self).current_type {
             TokenTypes::Identifier => self.parse_identifier_expr(),
             TokenTypes::Number => self.parse_number_expr(),
             TokenTypes::ParenL => self.parse_paren_expr(),
@@ -71,7 +79,7 @@ impl<'a> Parsers<'a> {
         }
     }
     pub fn get_token_precedence(&mut self) -> i16 {
-        if let Some(val) = match_binop_precedence(&self.handler.current_type) {
+        if let Some(val) = match_binop_precedence(&HANDLER!(self).current_type) {
             val
         } else {
             -1
@@ -84,8 +92,8 @@ impl<'a> Parsers<'a> {
             if token_prec < expr_prec {
                 return lhs;
             }
-            let bin_op = self.handler.current_type.clone();
-            self.handler.next_token();
+            let bin_op = HANDLER!(self).current_type.clone();
+            HANDLER!(self).next_token();
             let mut rhs = self.parse_primary();
             let next_prec = self.get_token_precedence();
             if token_prec < next_prec {
@@ -96,15 +104,15 @@ impl<'a> Parsers<'a> {
     }
 
     pub fn parse_prototype(&mut self) -> Box<dyn ExprAST> {
-        if matches!(self.handler.current_type, TokenTypes::Identifier) {
-            let name = self.handler.current_value_string.clone();
-            self.handler.next_token();
-            if matches!(self.handler.next_token(), TokenTypes::ParenL) {
-                let mut arg_names = Vec::<String_>::new();
-                while matches!(self.handler.next_token(), TokenTypes::Identifier) {
-                    arg_names.push(self.handler.current_value_string.clone());
+        if matches!(HANDLER!(self).current_type, TokenTypes::Identifier) {
+            let name = HANDLER!(self).current_value_string.clone();
+            HANDLER!(self).next_token();
+            if matches!(HANDLER!(self).next_token(), TokenTypes::ParenL) {
+                let mut arg_names = Vec::<String>::new();
+                while matches!(HANDLER!(self).next_token(), TokenTypes::Identifier) {
+                    arg_names.push(HANDLER!(self).current_value_string.clone());
                 }
-                if !matches!(self.handler.next_token(), TokenTypes::ParenR) {
+                if !matches!(HANDLER!(self).next_token(), TokenTypes::ParenR) {
                     panic!("Expected ')' in prototype")
                 }
                 Box::new(PrototypeAST::new(name, arg_names))

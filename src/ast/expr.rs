@@ -1,10 +1,21 @@
-use std::{iter::Peekable, str::Chars};
+use std::{
+    cell::{RefCell, RefMut},
+    iter::Peekable,
+    rc::Rc,
+    str::Chars,
+};
 
 use dyn_clone::{clone_trait_object, DynClone};
+use inkwell::values::AnyValue;
 
-use crate::parser::token::TokenTypes;
+use crate::{
+    compiler::{codegen::Codegen, compiler::CompilerContext},
+    parser::{parser::Parsers, token::TokenTypes},
+};
 
-pub trait ExprAST: DynClone {}
+pub trait ExprAST: DynClone {
+    fn codegen<'a>(&self, c: &mut Codegen<'a>) -> Box<dyn AnyValue<'a>>;
+}
 clone_trait_object!(ExprAST);
 
 #[derive(Clone)]
@@ -45,11 +56,11 @@ pub struct FunctionAST {
 #[derive(Clone)]
 pub struct ErrorAST;
 
-#[derive(Clone)]
 pub struct ExpressionHandler<'a> {
     pub raw_iter: Peekable<Chars<'a>>,
     pub current_pos: (usize, usize),
     pub current_type: TokenTypes,
     pub current_value_number: f64,
     pub current_value_string: String,
+    pub compiler_context: Option<Rc<RefCell<CompilerContext<'a>>>>,
 }
