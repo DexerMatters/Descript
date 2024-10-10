@@ -37,6 +37,7 @@ library:
   source-dirs: [src, src/expr]
   dependencies:
     - megaparsec
+    - mtl
 
 executables:
   descript-exe:

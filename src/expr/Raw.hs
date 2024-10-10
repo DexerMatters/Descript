@@ -2,7 +2,7 @@
 
 module Raw where
 
-import qualified Tm
+import Tm (Prim)
 
 -- Syntax
 newtype Prog = Prog [Def]
@@ -30,7 +30,7 @@ data Tm
 data Ty
   = -- Explicit types
     TyVar Name
-  | TyPrim Tm.Prim
+  | TyPrim Prim
   | TyArrow [Ty] Ty
   | TyTuple [Ty]
   | TyRcd [(Label, Ty)]
