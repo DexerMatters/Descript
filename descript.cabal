@@ -28,6 +28,8 @@ library
       Lib
       Parse
       TC
+      Utils
+      Raw
       Tm
       Val
   other-modules:

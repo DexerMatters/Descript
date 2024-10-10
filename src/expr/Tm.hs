@@ -1,52 +1,17 @@
-{-# OPTIONS_GHC -Wno-missing-export-lists #-}
-
 module Tm where
-
--- Syntax
-newtype Prog = Prog [Def]
-
-data Def
-  = FuncDef Name [Pttrn] (Maybe Ty) Tm
-  | ValDef Name Tm
-  | TyLet Name Ty
-  deriving (Show)
-
-data Tm
-  = Var Name
-  | Lit Lit
-  | Lam [Pttrn {- Arguments -}] (Maybe Ty {- Return -}) Tm {- Body -}
-  | App Tm [Tm]
-  | Let Pttrn Tm Tm
-  | Cond Tm {- Pred -} Tm {- Then -} Tm {- Else -}
-  | Tuple [Tm]
-  | Proj Tm Label
-  | Ann Tm Ty
-  | Seq [Tm]
-  | Rcd [(Label, Tm)]
-  deriving (Show)
 
 data Ty
   = -- Explicit types
-    TyVar String
+    TyVar Int
   | TyPrim Prim
-  | TyArrow Ty Ty
+  | TyArrow [Ty] Ty
   | TyTuple [Ty]
   | TyRcd [(Label, Ty)]
-  | TyApp Ty Ty
+  | TyApp Ty [Ty]
   | -- Generated types
-    TyLam String Ty
-  deriving (Show)
-
--- Other types
-type Name = String
-
-type Label = String
-
-data Lit
-  = LitNum Int
-  | LitBool Bool
-  | LitStr String
-  | LitUnit
+    TyLam Int Ty
+  | TyCast Ty Ty
+  | TySeq [Ty]
   deriving (Show)
 
 data Prim
@@ -57,7 +22,30 @@ data Prim
   deriving (Show)
 
 data Pttrn
-  = PttrnAtom Name
+  = PttrnAtom String
   | PttrnAnn Pttrn Ty
   | PttrnTuple [Pttrn]
   deriving (Show)
+
+-- Other types
+
+type Label = String
+
+data Constr = Constr {tops :: [Ty], bots :: [Ty]} deriving (Show)
+
+emptyConstr :: Constr
+emptyConstr = Constr [] []
+
+-- Aux functions
+(<^) :: Constr -> Ty -> Constr
+(<^) (Constr ts bs) t = Constr (t : ts) bs
+
+(<$) :: Constr -> Ty -> Constr
+(<$) (Constr ts bs) t = Constr ts (t : bs)
+
+infixr 5 <^, <$
+
+(|-) :: t1 -> (t1 -> t2) -> t2
+(|-) env f = f env
+
+infixl 9 |-

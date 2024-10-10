@@ -4,11 +4,12 @@ import Control.Applicative (optional, (<|>))
 import Control.Exception ()
 import Data.Functor (($>))
 import Data.Void (Void)
+import Raw (Def (FuncDef, TyLet, ValDef), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
 import Text.Megaparsec (MonadParsec (notFollowedBy, try), Parsec, anySingleBut, between, choice, many, sepBy, some)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, upperChar)
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Debug (MonadParsecDbg (dbg))
-import Tm (Def (FuncDef, TyLet, ValDef), Lit (..), Prim (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
+import Tm (Prim (..))
 
 preserved :: [String]
 preserved =
@@ -103,9 +104,14 @@ d :: (Show a) => Parser a -> Parser a
 d = dbg "Parsing::\n"
 
 parseTm :: Int -> Parser Tm
-parseTm p = try (paren (parseTm 0) <* notFollowedBy (symbol "=>")) <|> choice l
+parseTm p = try disambiguate <|> choice l
   where
     l = drop p $ try <$> [pLet, pLam, pApp, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pLit, pVar]
+    disambiguate =
+      (symbol "(" <* notFollowedBy (symbol ")"))
+        *> parseTm 0
+        <* symbol ")"
+        <* notFollowedBy (symbol "=>")
 
 pVar :: Parser Tm
 pVar = Var <$> lexeme camelCase
@@ -183,7 +189,7 @@ pPttrnAnn = PttrnAnn <$> parsePttrn 1 <*> (symbol ":" *> parseTy 0)
 -- -------------
 
 parseTy :: Int -> Parser Ty
-parseTy p = choice $ drop p $ try <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyVar, pTyPrim]
+parseTy p = choice $ drop p $ try <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
 
 pTyVar :: Parser Ty
 pTyVar = TyVar <$> lexeme pascalCase
@@ -199,7 +205,10 @@ pTyPrim =
       ]
 
 pTyArrow :: Parser Ty
-pTyArrow = TyArrow <$> parseTy 1 <*> (symbol "->" *> parseTy 0)
+pTyArrow =
+  TyArrow
+    <$> paren (sepBy (parseTy 0) (symbol ","))
+    <*> (symbol "->" *> parseTy 0)
 
 pTyTuple :: Parser Ty
 pTyTuple = TyTuple <$> bracket (sepBy (parseTy 0) (symbol ","))
@@ -210,4 +219,7 @@ pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ","))
     parseFld = (,) <$> camelCase <*> (symbol ":" *> parseTy 0)
 
 pTyApp :: Parser Ty
-pTyApp = TyApp <$> (symbol "<" *> parseTy 2) <*> (symbol ">" *> parseTy 0)
+pTyApp =
+  TyApp
+    <$> parseTy 2
+    <*> between (symbol "<") (symbol ">") (sepBy (parseTy 0) (symbol ","))
