@@ -1,4 +1,9 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Tm where
+
+import Control.Monad (join)
+import Data.List (intercalate)
 
 data Ty
   = -- Explicit types
@@ -11,6 +16,7 @@ data Ty
   | -- Generated types
     TyLam Int Ty
   | TyCast Ty Ty
+  | TyBiCast Ty Ty
   | TySeq [Ty]
   deriving (Show)
 
@@ -49,3 +55,26 @@ infixr 5 <^, <$
 (|-) env f = f env
 
 infixl 9 |-
+
+class PrettyShow a where
+  prettyShow :: a -> String
+
+instance PrettyShow Prim where
+  prettyShow :: Prim -> String
+  prettyShow PrimNum = "Number"
+  prettyShow PrimBool = "Bool"
+  prettyShow PrimStr = "String"
+  prettyShow PrimUnit = "Unit"
+
+instance PrettyShow Ty where
+  prettyShow :: Ty -> String
+  prettyShow (TyVar i) = "%T" ++ show i
+  prettyShow (TyPrim p) = prettyShow p
+  prettyShow (TyArrow tys ty) = "(" ++ intercalate ", " (map prettyShow tys) ++ ") -> " ++ prettyShow ty
+  prettyShow (TyTuple tys) = "(" ++ intercalate ", " (map prettyShow tys) ++ ")"
+  prettyShow (TyRcd rcd) = "Record{" ++ unwords (map (\(l, t) -> l ++ ": " ++ prettyShow t ++ "; ") rcd) ++ "}"
+  prettyShow (TyApp ty tys) = prettyShow ty ++ intercalate ", " (map prettyShow tys)
+  prettyShow (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ prettyShow ty
+  prettyShow (TyCast ty1 ty2) = prettyShow ty1 ++ " => " ++ prettyShow ty2
+  prettyShow (TyBiCast ty1 ty2) = prettyShow ty1 ++ " <=> " ++ prettyShow ty2
+  prettyShow (TySeq tys) = "Sequence{" ++ intercalate ", " (map prettyShow tys) ++ "}"

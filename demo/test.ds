@@ -1,9 +1,6 @@
-if (true) 
-  let a = 12 as String
-  let b = 23 as String
-  f(a, b)
-else 
-  {
-    func: (a : Number) => a,
-    value: 23
-  }
+([a, b], y) => (
+  if (a)
+    b
+  else
+    y
+)
