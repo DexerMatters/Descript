@@ -28,6 +28,9 @@ library
       Lib
       Parse
       TC
+      TCUtils
+      TE
+      TEUtils
       Utils
       Raw
       Tm

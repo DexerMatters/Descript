@@ -7,7 +7,7 @@ import Parse (parseTm)
 import TC (infer)
 import Text.Megaparsec (parseTest, runParser)
 import Tm (PrettyShow (prettyShow))
-import Utils (TCArrow (runTCArrow), runTC)
+import Utils (runPartially)
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"
@@ -22,7 +22,8 @@ someFunc = do
       print e
     Right r -> do
       putStrLn $ show r ++ "\n"
-      case runTC infer r of
+      case runPartially infer r of
         Left e -> print e
-        Right r' ->
-          print $ prettyShow r'
+        Right r' -> do
+          let (a, env) = r'
+          print $ prettyShow a

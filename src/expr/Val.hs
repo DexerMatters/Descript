@@ -4,14 +4,16 @@ import Raw (Name)
 import Tm (Prim)
 import qualified Tm as T (Ty (..))
 
-type Env = [(Name, Ty)]
+type Border = (Ty, Ty)
 
-newtype Closure = Closure (Env, T.Ty)
+data Env = Env {types :: [Ty], borders :: [Border]}
+
+data Closure = Closure Env T.Ty
 
 data Ty
-  = TyVar Name
+  = TyVar Int
   | TyPrim Prim
-  | TyArrow Ty Ty
+  | TyArrow [Ty] Ty
   | TyTuple [Ty]
   | TyRcd [(Name, Ty)]
-  | TyLam Name Closure
+  | TyLam Int Closure

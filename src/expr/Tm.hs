@@ -25,7 +25,7 @@ data Prim
   | PrimBool
   | PrimStr
   | PrimUnit
-  deriving (Show)
+  deriving (Show, Eq)
 
 data Pttrn
   = PttrnAtom String

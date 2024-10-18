@@ -5,9 +5,10 @@
 module TC where
 
 import Control.Arrow (Arrow (second), returnA, (>>^), (^>>))
-import Data.List (findIndex, isSubsequenceOf, sortOn)
-import qualified Raw as R (Label, Lit (..), Pttrn (..), Tm (..), Ty (..))
-import qualified Tm as T (Constr (Constr, bots, tops), Label, Prim (..), Ty (..))
+import Data.List (findIndex, sortOn)
+import qualified Raw as R (Lit (..), Pttrn (..), Tm (..), Ty (..))
+import TCUtils
+import qualified Tm as T (Constr (Constr, bots, tops), Prim (..), Ty (..))
 import Utils
 import Prelude hiding ((<$))
 
