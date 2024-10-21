@@ -4,6 +4,7 @@ module Tm where
 
 import Control.Monad (join)
 import Data.List (intercalate)
+import Utils (PrettyShow (prettyShow))
 
 data Ty
   = -- Explicit types
@@ -55,9 +56,6 @@ infixr 5 <^, <$
 (|-) env f = f env
 
 infixl 9 |-
-
-class PrettyShow a where
-  prettyShow :: a -> String
 
 instance PrettyShow Prim where
   prettyShow :: Prim -> String

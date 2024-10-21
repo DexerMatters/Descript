@@ -71,7 +71,7 @@ conv = proc (lhs, rhs) -> case (lhs, rhs) of
     conv -< (bot, ty)
     conv -< (ty, top)
   (V.TyPrim prim1, V.TyPrim prim2)
-    | prim1 == prim2 -> returnA -< ()
+    | prim1 == prim2 -> returnA -< True
   (V.TyArrow l1 r1, V.TyArrow l2 r2) -> do
     fmapA' conv -< zip l1 l2
     conv -< (r2, r1)
@@ -83,19 +83,21 @@ conv = proc (lhs, rhs) -> case (lhs, rhs) of
     t1 <- apply -< (args, cls1)
     t2 <- apply -< (args, cls2)
     conv -< (t1, t2)
-  (V.TyPrim p1, V.TyPrim p2) | p1 == p2 -> returnA -< ()
   (V.TyRcd rcd1, V.TyRcd rcd2) ->
     go -< (rcd1, rcd2)
   _ -> () >- throw BadCast
   where
     go = proc (r1, r2) -> case (r1, r2) of
-      (_, []) -> returnA -< ()
-      ([], _) -> () >- throw BadCast
+      (_, []) -> returnA -< True
+      ([], _) -> returnA -< False
       ((l1, t1) : r1', (l2, t2) : r2')
         | l1 == l2 -> do
-            conv -< (t1, t2)
-            go -< (r1', r2')
-        | otherwise -> () >- throw BadCast
+            b <- conv -< (t1, t2)
+            if b
+              then
+                go -< (r1', r2')
+              else returnA -< False
+        | otherwise -> returnA -< False
 
 apply :: ([V.Ty], V.Closure) ->> V.Ty
 apply = proc (args, V.Closure env tm) -> do

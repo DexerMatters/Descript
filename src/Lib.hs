@@ -6,8 +6,7 @@ where
 import Parse (parseTm)
 import TC (infer)
 import Text.Megaparsec (parseTest, runParser)
-import Tm (PrettyShow (prettyShow))
-import Utils (runPartially)
+import Utils (PrettyShow (prettyShow), runPartially)
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"

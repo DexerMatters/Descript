@@ -15,6 +15,9 @@ newtype PartialArrow s e a b = PartialArrow {runPartialArrow :: (s, a) -> Either
 class Emptyness a where
   empty :: a
 
+class PrettyShow a where
+  prettyShow :: a -> String
+
 instance Category (PartialArrow s e) where
   id = PartialArrow Right
   (PartialArrow f) . (PartialArrow g) = PartialArrow $ g >=> f
@@ -63,3 +66,8 @@ getEnv = PartialArrow $ \(env, _) -> Right (env, env)
 
 modifyEnv :: PartialArrow s e (s -> s) ()
 modifyEnv = PartialArrow $ \(env, f) -> Right (f env, ())
+
+genTVarName :: Int -> String
+genTVarName i
+  | i < 26 = show $ ['a' .. 'z'] !! i
+  | otherwise = "t" ++ show i
