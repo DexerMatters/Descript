@@ -5,10 +5,11 @@
 module TCUtils where
 
 import Control.Arrow (returnA)
+import Debug.Trace (trace)
 import qualified Tm as T
 import Utils
 
-data Env = Env {vars :: [(Name, T.Ty)], tvars :: [(TName, T.Constr)]}
+data Env = Env {vars :: [(Name, T.Ty)], tvars :: [(TName, T.Constr)]} deriving (Show)
 
 type TName = String
 

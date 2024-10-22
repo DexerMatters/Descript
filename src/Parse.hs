@@ -6,10 +6,12 @@ import Data.Functor (($>))
 import Data.Void (Void)
 import Raw (Def (FuncDef, TyLet, ValDef), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
 import Text.Megaparsec (MonadParsec (notFollowedBy, try), Parsec, anySingleBut, between, choice, many, sepBy, some)
+import qualified Text.Megaparsec as L
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, upperChar)
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Debug (MonadParsecDbg (dbg))
 import Tm (Prim (..))
+import Utils (FI (FI))
 
 preserved :: [String]
 preserved =
@@ -65,53 +67,64 @@ bracket = between (symbol "[") (symbol "]")
 brace :: Parser a -> Parser a
 brace = between (symbol "{") (symbol "}")
 
+withFI :: Parser Tm -> Parser FITm
+withFI p = do
+  start <- L.getOffset
+  tm <- p
+  end <- L.getOffset
+  return $ FI (start, end) tm
+
 -- -------------
 -- Definition Parsing
 -- -------------
 
-parseProg :: Parser Prog
-parseProg = do
-  defs <- many parseDef
-  return $ Prog defs
+-- parseProg :: Parser Prog
+-- parseProg = do
+--   defs <- many parseDef
+--   return $ Prog defs
 
-parseDef :: Parser Def
-parseDef = pValDef <|> pTyLet <|> pFuncDef
+-- parseDef :: Parser Def
+-- parseDef = pValDef <|> pTyLet <|> pFuncDef
 
-pValDef :: Parser Def
-pValDef =
-  ValDef
-    <$> (symbol "let" *> camelCase)
-    <*> (symbol "=" *> parseTm 0 <* newline)
+-- pValDef :: Parser Def
+-- pValDef =
+--   ValDef
+--     <$> (symbol "let" *> camelCase)
+--     <*> (symbol "=" *> parseTm 0 <* newline)
 
-pTyLet :: Parser Def
-pTyLet =
-  TyLet
-    <$> (symbol "type" *> pascalCase)
-    <*> (symbol "=" *> parseTy 0 <* newline)
+-- pTyLet :: Parser Def
+-- pTyLet =
+--   TyLet
+--     <$> (symbol "type" *> pascalCase)
+--     <*> (symbol "=" *> parseTy 0 <* newline)
 
-pFuncDef :: Parser Def
-pFuncDef =
-  FuncDef
-    <$> (symbol "function" *> camelCase)
-    <*> paren (sepBy (parsePttrn 0) (symbol ","))
-    <*> optional (symbol "=>" *> parseTy 0)
-    <*> (parseTm 0 <* newline)
+-- pFuncDef :: Parser Def
+-- pFuncDef =
+--   FuncDef
+--     <$> (symbol "function" *> camelCase)
+--     <*> paren (sepBy (parsePttrn 0) (symbol ","))
+--     <*> optional (symbol "=>" *> parseTy 0)
+--     <*> (parseTm 0 <* newline)
 
 -- -------------
 -- Term Parsing
 -- -------------
+type FITm = FI Tm
+
 d :: (Show a) => Parser a -> Parser a
 d = dbg "Parsing::\n"
 
-parseTm :: Int -> Parser Tm
-parseTm p = try disambiguate <|> choice l
+parseTm :: Int -> Parser FITm
+parseTm p = choice l
   where
-    l = drop p $ try <$> [pLet, pLam, pApp, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pLit, pVar]
-    disambiguate =
-      (symbol "(" <* notFollowedBy (symbol ")"))
-        *> parseTm 0
-        <* symbol ")"
-        <* notFollowedBy (symbol "=>")
+    l = drop p $ try . withFI <$> [pLet, pApp, pLam, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pLit, pVar, pParen]
+
+pParen :: Parser Tm
+pParen =
+  (symbol "(" <* notFollowedBy (symbol ")"))
+    *> parseTm 0
+    <* symbol ")"
+    <* notFollowedBy (symbol "=>")
 
 pVar :: Parser Tm
 pVar = Var <$> lexeme camelCase
@@ -138,7 +151,7 @@ pSeq :: Parser Tm
 pSeq = Seq <$> brace (sepBy (parseTm 0) (symbol ";"))
 
 pApp :: Parser Tm
-pApp = App <$> parseTm 5 <*> paren (sepBy (parseTm 0) (symbol ","))
+pApp = App <$> parseTm 8 <*> paren (sepBy (parseTm 1) (symbol ","))
 
 pLet :: Parser Tm
 pLet =

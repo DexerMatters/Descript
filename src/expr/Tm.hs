@@ -2,6 +2,7 @@
 
 module Tm where
 
+import Control.Applicative (Const)
 import Control.Monad (join)
 import Data.List (intercalate)
 import Utils (PrettyShow (prettyShow))
@@ -76,3 +77,12 @@ instance PrettyShow Ty where
   prettyShow (TyCast ty1 ty2) = prettyShow ty1 ++ " => " ++ prettyShow ty2
   prettyShow (TyBiCast ty1 ty2) = prettyShow ty1 ++ " <=> " ++ prettyShow ty2
   prettyShow (TySeq tys) = "Sequence{" ++ intercalate ", " (map prettyShow tys) ++ "}"
+
+instance PrettyShow Constr where
+  prettyShow :: Constr -> String
+  prettyShow (Constr ts bs) =
+    "Tops: "
+      ++ intercalate ", " (map prettyShow ts)
+      ++ "\n"
+      ++ " Bots: "
+      ++ intercalate ", " (map prettyShow bs)

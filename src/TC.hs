@@ -108,7 +108,7 @@ inferPattern :: R.Pttrn ->> T.Ty
 inferPattern = proc p -> case p of
   R.PttrnAtom x -> do
     newTVar -< "%T" ++ x
-    ty <- () >- getEnv >>^ T.TyVar . length . tvars
+    ty <- () >- getEnv >>^ T.TyVar . subtract 1 . length . tvars
     newVar -< (x, ty)
   R.PttrnTuple ps ->
     ps >- fmapA inferPattern >>^ T.TyTuple

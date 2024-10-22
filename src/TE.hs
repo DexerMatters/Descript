@@ -57,6 +57,8 @@ eval = proc ty -> case ty of
 
 conv :: (V.Ty, V.Ty) ->> Bool
 conv = proc (lhs, rhs) -> case (lhs, rhs) of
+  (_, V.TyTop) -> returnA -< True
+  (V.TyBot, _) -> returnA -< True
   (V.TyVar i1, V.TyVar i2) -> do
     (bot, top) <- getBorder -< i1
     (bot', top') <- getBorder -< i2
@@ -107,3 +109,35 @@ apply = proc (args, V.Closure env tm) -> do
   ty <- eval -< tm
   setEnv -< env0
   returnA -< ty
+
+getBorder :: Int ->> V.Border
+getBorder = proc i -> do
+  state <- getConstrs -< i
+  case state of
+    Interpreted border -> returnA -< border
+    Uninterpreted (T.Constr tops bots) -> do
+      tops' <- fmapA eval -< tops
+      bots' <- fmapA eval -< bots
+      bot <- bottommost -< bots'
+      top <- topmost -< tops'
+      returnA -< (bot, top)
+  where
+    bottommost = proc tys -> case tys of
+      [] -> returnA -< V.TyTop
+      [ty] -> returnA -< ty
+      ty : tys' -> do
+        bot <- bottommost -< tys'
+        r <- conv -< (ty, bot)
+        if r
+          then returnA -< bot
+          else returnA -< ty
+
+    topmost = proc tys -> case tys of
+      [] -> returnA -< V.TyBot
+      [ty] -> returnA -< ty
+      ty : tys' -> do
+        top <- topmost -< tys'
+        r <- conv -< (top, ty)
+        if r
+          then returnA -< top
+          else returnA -< ty
