@@ -11,14 +11,18 @@ import qualified TE
 import TEUtils (liftEnv)
 import Text.Megaparsec (parseTest, runParser)
 import Utils (PartialArrow (runPartialArrow), PrettyShow (prettyShow), runPartially)
-import Val (Env (constrs))
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"
 
+printInfo :: String -> IO ()
+printInfo x = putStrLn $ "\ESC[92m[Info]\t" ++ x ++ "\ESC[0m"
+
+printErr :: String -> IO ()
+printErr x = putStrLn $ "\ESC[91m[Error]\t" ++ x ++ "\ESC[0m"
+
 someFunc :: IO ()
 someFunc = do
-  putStrLn "\ESC[92m"
   raw <- readFile path
   parseTest (parseTm 0) raw
   let parsed = runParser (parseTm 0) path raw
@@ -31,9 +35,7 @@ someFunc = do
         Left e -> print e
         Right (a, env) -> do
           let env' = liftEnv env
-          putStrLn $ prettyShow a
           case runPartialArrow TE.eval (env', a) of
-            Left e -> print e
-            Right (env', b) -> do
-              putStrLn $ prettyShow (constrs env')
-              putStrLn $ prettyShow b
+            Left e -> printErr $ show e
+            Right (_, b) -> do
+              printInfo $ prettyShow b

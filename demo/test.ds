@@ -1,1 +1,7 @@
-((a, [b, e: Bool], c) => e)(1, ["hello", 13], true)
+((a, [b, e], c) => 
+  if (c) {
+    a
+  } else {
+    b
+  }
+)(1, [12, 13], "true")
