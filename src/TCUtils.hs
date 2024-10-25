@@ -1,30 +1,32 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module TCUtils where
 
 import Control.Arrow (returnA)
-import Debug.Trace (trace)
 import qualified Tm as T
 import Utils
 
-data Env = Env {vars :: [(Name, T.Ty)], tvars :: [(TName, T.Constr)]} deriving (Show)
+data Env = Env {vars :: [(Name, FI T.Ty)], tvars :: [(TName, T.Constr)]} deriving (Show)
 
 type TName = String
 
 type Name = String
 
+type Pos = (Int, Int)
+
 data TCError
-  = UnboundVariable
-  | UnboundTypeVariable
-  | MultipleAnnotation
-  | UndefinedPattern
-  | IncorrectParameterCount
-  | UndefinedField
-  | NotAFunction
-  | NotARecord
-  | UndefinedBehavior
+  = UnboundVariable Pos
+  | UnboundTypeVariable Pos
+  | MultipleAnnotation Pos
+  | UndefinedPattern Pos
+  | IncorrectParameterCount Pos
+  | UndefinedField Pos
+  | NotAFunction Pos
+  | NotARecord Pos
+  | UndefinedBehavior Pos
   deriving (Show)
 
 type (->>) = PartialArrow Env TCError
@@ -33,15 +35,15 @@ instance Emptyness Env where
   empty :: Env
   empty = Env [] []
 
-var :: Name ->> T.Ty
-var = PartialArrow $ \(env, x) -> case lookup x (vars env) of
+var :: FI Name ->> FI T.Ty
+var = PartialArrow $ \(env, x) -> case lookup (val x) (vars env) of
   Just ty -> Right (env, ty)
-  Nothing -> Left UnboundVariable
+  Nothing -> Left $ UnboundVariable (pos x)
 
-constr :: TName ->> T.Constr
-constr = PartialArrow $ \(env, x) -> case lookup x (tvars env) of
+constr :: FI TName ->> T.Constr
+constr = PartialArrow $ \(env, x) -> case lookup (val x) (tvars env) of
   Just c -> Right (env, c)
-  Nothing -> Left UnboundTypeVariable
+  Nothing -> Left $ UnboundTypeVariable (pos x)
 
 getTConstr :: Int ->> T.Constr
 getTConstr = PartialArrow $ \(env, i) -> Right (env, snd (tvars env !! i))
@@ -67,7 +69,7 @@ setConstr = proc (x, c) -> do
       | x == y = (x, c) : ys
       | otherwise = (y, c) : go x c ys
 
-newVar :: (Name, T.Ty) ->> T.Ty
+newVar :: (Name, FI T.Ty) ->> FI T.Ty
 newVar = proc (x, ty) -> do
   modifyEnv -< \env -> env {vars = (x, ty) : vars env}
   returnA -< ty
@@ -76,12 +78,12 @@ newTVar :: Name ->> ()
 newTVar = proc x -> do
   modifyEnv -< \env -> env {tvars = (x, T.Constr [] []) : tvars env}
 
-addBot :: (Int, T.Ty) ->> ()
+addBot :: (Int, FI T.Ty) ->> ()
 addBot = proc (i, ty) -> do
   c <- getTConstr -< i
   setTConstr -< (i, c {T.bots = ty : T.bots c})
 
-addTop :: (Int, T.Ty) ->> ()
+addTop :: (Int, FI T.Ty) ->> ()
 addTop = proc (i, ty) -> do
   c <- getTConstr -< i
   setTConstr -< (i, c {T.tops = ty : T.tops c})

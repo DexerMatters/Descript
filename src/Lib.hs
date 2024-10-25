@@ -9,7 +9,7 @@ import Parse (parseTm)
 import TC (infer)
 import qualified TE
 import TEUtils (liftEnv)
-import Text.Megaparsec (parse, parseTest, runParser)
+import Text.Megaparsec (parseTest, runParser)
 import Utils (PartialArrow (runPartialArrow), PrettyShow (prettyShow), runPartially)
 import Val (Env (constrs))
 
@@ -31,6 +31,7 @@ someFunc = do
         Left e -> print e
         Right (a, env) -> do
           let env' = liftEnv env
+          putStrLn $ prettyShow a
           case runPartialArrow TE.eval (env', a) of
             Left e -> print e
             Right (env', b) -> do

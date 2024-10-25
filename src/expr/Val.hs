@@ -1,28 +1,33 @@
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 module Val where
 
 import Data.List (intercalate)
 import Raw (Name)
 import Tm (Constr, Prim)
 import qualified Tm as T (Ty (..))
-import Utils (EvalState, PrettyShow (prettyShow), genTVarName)
+import Utils (EvalState, FI, PrettyShow (prettyShow), genTVarName)
 
-type Border = (Ty, Ty)
+type Border = (FITy, FITy)
 
 type ConstrState = EvalState Tm.Constr Border
 
-data Env = Env {types :: [Ty], constrs :: [ConstrState]}
+type FITy = FI Ty
 
-data Closure = Closure Env T.Ty
+data Env = Env {types :: [FITy], constrs :: [ConstrState]} deriving (Show)
+
+data Closure = Closure Env (FI T.Ty) deriving (Show)
 
 data Ty
   = TyVar Int
   | TyPrim Prim
-  | TyArrow [Ty] Ty
-  | TyTuple [Ty]
-  | TyRcd [(Name, Ty)]
+  | TyArrow [FITy] FITy
+  | TyTuple [FITy]
+  | TyRcd [(Name, FITy)]
   | TyLam Int Closure
   | TyTop
   | TyBot
+  deriving (Show)
 
 instance PrettyShow Ty where
   prettyShow (TyVar i) = genTVarName i

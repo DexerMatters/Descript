@@ -1,10 +1,12 @@
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 module Parse where
 
 import Control.Applicative (optional, (<|>))
 import Control.Exception ()
 import Data.Functor (($>))
 import Data.Void (Void)
-import Raw (Def (FuncDef, TyLet, ValDef), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
+import Raw (Lit (..), Pttrn (..), Tm (..), Ty (..))
 import Text.Megaparsec (MonadParsec (notFollowedBy, try), Parsec, anySingleBut, between, choice, many, sepBy, some)
 import qualified Text.Megaparsec as L
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, upperChar)
@@ -67,12 +69,17 @@ bracket = between (symbol "[") (symbol "]")
 brace :: Parser a -> Parser a
 brace = between (symbol "{") (symbol "}")
 
-withFI :: Parser Tm -> Parser FITm
+withFI :: Parser a -> Parser (FI a)
 withFI p = do
   start <- L.getOffset
   tm <- p
   end <- L.getOffset
   return $ FI (start, end) tm
+
+withoutFI :: Parser (FI a) -> Parser a
+withoutFI p = do
+  FI _ tm <- p
+  return tm
 
 -- -------------
 -- Definition Parsing
@@ -122,7 +129,7 @@ parseTm p = choice l
 pParen :: Parser Tm
 pParen =
   (symbol "(" <* notFollowedBy (symbol ")"))
-    *> parseTm 0
+    *> (withoutFI . parseTm) 0
     <* symbol ")"
     <* notFollowedBy (symbol "=>")
 
@@ -184,9 +191,10 @@ pRcd = Rcd <$> brace (sepBy parseFld (symbol ","))
 -- -------------
 -- Pattern Parsing
 -- -------------
+type FIPttrn = FI Pttrn
 
-parsePttrn :: Int -> Parser Pttrn
-parsePttrn p = choice $ drop p $ try <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
+parsePttrn :: Int -> Parser FIPttrn
+parsePttrn p = choice $ drop p $ try . withFI <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
 
 pPttrnAtom :: Parser Pttrn
 pPttrnAtom = PttrnAtom <$> lexeme camelCase
@@ -200,9 +208,10 @@ pPttrnAnn = PttrnAnn <$> parsePttrn 1 <*> (symbol ":" *> parseTy 0)
 -- -------------
 -- Type Parsing
 -- -------------
+type FITy = FI Ty
 
-parseTy :: Int -> Parser Ty
-parseTy p = choice $ drop p $ try <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
+parseTy :: Int -> Parser FITy
+parseTy p = choice $ drop p $ try . withFI <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
 
 pTyVar :: Parser Ty
 pTyVar = TyVar <$> lexeme pascalCase

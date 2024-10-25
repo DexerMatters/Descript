@@ -17,9 +17,9 @@ data Def
 data Tm
   = Var Name
   | Lit Lit
-  | Lam [Pttrn {- Arguments -}] (Maybe FITy {- Return -}) FITm {- Body -}
+  | Lam [FI Pttrn {- Arguments -}] (Maybe FITy {- Return -}) FITm {- Body -}
   | App FITm [FITm]
-  | Let Pttrn FITm FITm
+  | Let (FI Pttrn) FITm FITm
   | Cond FITm {- Pred -} FITm {- Then -} FITm {- Else -}
   | Tuple [FITm]
   | Proj FITm Label
@@ -55,8 +55,8 @@ data Lit
 
 data Pttrn
   = PttrnAtom Name
-  | PttrnAnn Pttrn Ty
-  | PttrnTuple [Pttrn]
+  | PttrnAnn (FI Pttrn) (FI Ty)
+  | PttrnTuple [FI Pttrn]
   deriving (Show)
 
 type FITm = FI Tm

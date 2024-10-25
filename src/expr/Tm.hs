@@ -1,25 +1,26 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module Tm where
 
-import Control.Applicative (Const)
-import Control.Monad (join)
 import Data.List (intercalate)
-import Utils (PrettyShow (prettyShow))
+import Utils (FI, PrettyShow (prettyShow))
+
+type FITy = FI Ty
 
 data Ty
   = -- Explicit types
     TyVar Int
   | TyPrim Prim
-  | TyArrow [Ty] Ty
-  | TyTuple [Ty]
-  | TyRcd [(Label, Ty)]
-  | TyApp Ty [Ty]
+  | TyArrow [FITy] FITy
+  | TyTuple [FITy]
+  | TyRcd [(Label, FITy)]
+  | TyApp FITy [FITy]
   | -- Generated types
-    TyLam Int Ty
-  | TyCast Ty Ty
-  | TyBiCast Ty Ty
-  | TySeq [Ty]
+    TyLam Int FITy
+  | TyCast FITy FITy
+  | TyBiCast FITy FITy
+  | TySeq [FITy]
   deriving (Show)
 
 data Prim
@@ -31,7 +32,7 @@ data Prim
 
 data Pttrn
   = PttrnAtom String
-  | PttrnAnn Pttrn Ty
+  | PttrnAnn Pttrn FITy
   | PttrnTuple [Pttrn]
   deriving (Show)
 
@@ -39,24 +40,10 @@ data Pttrn
 
 type Label = String
 
-data Constr = Constr {tops :: [Ty], bots :: [Ty]} deriving (Show)
+data Constr = Constr {tops :: [FITy], bots :: [FITy]} deriving (Show)
 
 emptyConstr :: Constr
 emptyConstr = Constr [] []
-
--- Aux functions
-(<^) :: Constr -> Ty -> Constr
-(<^) (Constr ts bs) t = Constr (t : ts) bs
-
-(<$) :: Constr -> Ty -> Constr
-(<$) (Constr ts bs) t = Constr ts (t : bs)
-
-infixr 5 <^, <$
-
-(|-) :: t1 -> (t1 -> t2) -> t2
-(|-) env f = f env
-
-infixl 9 |-
 
 instance PrettyShow Prim where
   prettyShow :: Prim -> String
@@ -72,7 +59,7 @@ instance PrettyShow Ty where
   prettyShow (TyArrow tys ty) = "(" ++ intercalate ", " (map prettyShow tys) ++ ") -> " ++ prettyShow ty
   prettyShow (TyTuple tys) = "(" ++ intercalate ", " (map prettyShow tys) ++ ")"
   prettyShow (TyRcd rcd) = "Record{" ++ unwords (map (\(l, t) -> l ++ ": " ++ prettyShow t ++ "; ") rcd) ++ "}"
-  prettyShow (TyApp ty tys) = prettyShow ty ++ intercalate ", " (map prettyShow tys)
+  prettyShow (TyApp ty tys) = prettyShow ty ++ "<<" ++ intercalate ", " (map prettyShow tys) ++ ">>"
   prettyShow (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ prettyShow ty
   prettyShow (TyCast ty1 ty2) = prettyShow ty1 ++ " => " ++ prettyShow ty2
   prettyShow (TyBiCast ty1 ty2) = prettyShow ty1 ++ " <=> " ++ prettyShow ty2

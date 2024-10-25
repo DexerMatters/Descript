@@ -1,27 +1,28 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module TEUtils where
 
-import Control.Arrow (returnA)
 import qualified TCUtils as TC
-import qualified Tm
 import Utils
 import qualified Val as V
 
+type Pos = (Int, Int)
+
 data TEError
-  = ImproperBound
-  | BadCast
-  | NotAFunction
+  = ImproperBound Pos
+  | BadCast Pos (String, String)
+  | NotAFunction Pos
   deriving (Show)
 
 type (->>) = PartialArrow V.Env TEError
 
-addType :: V.Ty ->> ()
+addType :: FI V.Ty ->> ()
 addType = proc t -> do
   modifyEnv -< \env -> env {V.types = t : V.types env}
 
-getType :: Int ->> V.Ty
+getType :: Int ->> FI V.Ty
 getType = PartialArrow $ \(env, i) -> Right (env, V.types env !! i)
 
 getConstrs :: Int ->> V.ConstrState

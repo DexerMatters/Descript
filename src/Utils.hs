@@ -1,7 +1,6 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeOperators #-}
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module Utils where
 
@@ -9,16 +8,16 @@ import Control.Arrow (Arrow (..), ArrowChoice (left), returnA)
 import Control.Category (Category (..))
 import Control.Monad ((>=>))
 import Debug.Trace (trace)
-import GHC.Arr (Array)
 import Prelude hiding ((.))
 
 newtype PartialArrow s e a b = PartialArrow {runPartialArrow :: (s, a) -> Either e (s, b)}
 
-data EvalState a b = Uninterpreted a | Interpreted b
+data EvalState a b = Uninterpreted a | Interpreted b deriving (Show)
 
-data FI a = FI {fi :: (Int, Int), val :: a} deriving (Show)
+data FI a = FI {pos :: (Int, Int), val :: a}
 
-type Arr = Array Int
+unfi :: FI a -> a
+unfi (FI _ x) = x
 
 class Emptyness a where
   empty :: a
@@ -53,6 +52,9 @@ runPartially f x = case runPartialArrow f (empty, x) of
 
 throw :: e -> PartialArrow s e a b
 throw e = PartialArrow $ \_ -> Left e
+
+throwWith :: (a -> e) -> PartialArrow s e a b
+throwWith f = PartialArrow $ \(_, x) -> Left (f x)
 
 fmapA :: PartialArrow s e a b -> PartialArrow s e [a] [b]
 fmapA f = proc x -> case x of
@@ -93,6 +95,12 @@ getMaxAWith f = proc xs -> case xs of
       Just y' -> do
         b <- f -< (x, y')
         returnA -< if b then Just x else Just y'
+
+instance (Show a) => Show (FI a) where
+  show (FI _ x) = show x
+
+instance (PrettyShow a) => PrettyShow (FI a) where
+  prettyShow (FI _ x) = prettyShow x
 
 instance (PrettyShow a) => PrettyShow [a] where
   prettyShow [] = "Empty"
