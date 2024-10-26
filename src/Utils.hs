@@ -45,10 +45,21 @@ instance ArrowChoice (PartialArrow s e) where
 tr :: (Show a) => a -> a
 tr x = trace (show x) x
 
+lookupAndReplace :: (Eq a) => a -> b -> [(a, b)] -> [(a, b)]
+lookupAndReplace x y [] = [(x, y)]
+lookupAndReplace x y ((x', y') : xs)
+  | x == x' = (x, y) : xs
+  | otherwise = (x', y') : lookupAndReplace x y xs
+
 runPartially :: (Emptyness s) => PartialArrow s e a b -> a -> Either e (b, s)
 runPartially f x = case runPartialArrow f (empty, x) of
   Left e -> Left e
   Right (env, y) -> Right (y, env)
+
+runWithEnv :: PartialArrow s e a b -> s -> a -> Either e (b, s)
+runWithEnv f env x = case runPartialArrow f (env, x) of
+  Left e -> Left e
+  Right (env', y) -> Right (y, env')
 
 throw :: e -> PartialArrow s e a b
 throw e = PartialArrow $ \_ -> Left e

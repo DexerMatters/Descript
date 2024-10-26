@@ -6,12 +6,12 @@ import Tm (Prim)
 import Utils (FI)
 
 -- Syntax
-newtype Prog = Prog [Def]
+newtype Prog = Prog [FI Def] deriving (Show)
 
 data Def
-  = FuncDef Name [Pttrn] (Maybe Ty) Tm
-  | ValDef Name Tm
-  | TyLet Name Ty
+  = FuncDef Name [FI Pttrn] (Maybe (FI Ty)) (FI Tm)
+  | ValDef Name (FI Tm)
+  | TyLet Name (FI Ty)
   deriving (Show)
 
 data Tm

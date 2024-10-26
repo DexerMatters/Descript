@@ -5,11 +5,19 @@
 
 module TCUtils where
 
+import qualified Context as Ctx
 import Control.Arrow (returnA)
+import Data.List (elemIndex)
 import qualified Tm as T
 import Utils
 
-data Env = Env {vars :: [(Name, FI T.Ty)], tvars :: [(TName, T.Constr)]} deriving (Show)
+data Env = Env
+  { vars :: [(Name, FI T.Ty)],
+    tvars :: [(TName, T.Constr)],
+    rcdSyms :: [Name],
+    globalSyms :: [(Name, Ctx.Expr)]
+  }
+  deriving (Show)
 
 type TName = String
 
@@ -33,12 +41,7 @@ type (->>) = PartialArrow Env TCError
 
 instance Emptyness Env where
   empty :: Env
-  empty = Env [] []
-
-var :: FI Name ->> FI T.Ty
-var = PartialArrow $ \(env, x) -> case lookup (val x) (vars env) of
-  Just ty -> Right (env, ty)
-  Nothing -> Left $ UnboundVariable (pos x)
+  empty = Env [] [] [] []
 
 constr :: FI TName ->> T.Constr
 constr = PartialArrow $ \(env, x) -> case lookup (val x) (tvars env) of
@@ -87,3 +90,12 @@ addTop :: (Int, FI T.Ty) ->> ()
 addTop = proc (i, ty) -> do
   c <- getTConstr -< i
   setTConstr -< (i, c {T.tops = ty : T.tops c})
+
+getRecordIndex :: Name ->> Int
+getRecordIndex = proc x -> do
+  env <- getEnv -< ()
+  case elemIndex x (rcdSyms env) of
+    Just i -> returnA -< i
+    Nothing -> do
+      modifyEnv -< \e -> e {rcdSyms = x : rcdSyms env}
+      returnA -< length (rcdSyms env)

@@ -1,7 +1,9 @@
-((a, [b, e], c) => 
-  if (c) {
-    a
-  } else {
-    b
-  }
-)(1, [12, 13], "true")
+let n = [1, 2]
+
+type Cood = [Number, Number]
+
+function wtf([x1, y1]: Cood, [x2, y2]: Cood) {
+  x1
+}
+
+let test = wtf(n, n)

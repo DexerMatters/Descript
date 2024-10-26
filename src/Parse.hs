@@ -6,7 +6,7 @@ import Control.Applicative (optional, (<|>))
 import Control.Exception ()
 import Data.Functor (($>))
 import Data.Void (Void)
-import Raw (Lit (..), Pttrn (..), Tm (..), Ty (..))
+import Raw (Def (..), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
 import Text.Megaparsec (MonadParsec (notFollowedBy, try), Parsec, anySingleBut, between, choice, many, sepBy, some)
 import qualified Text.Megaparsec as L
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, upperChar)
@@ -81,37 +81,35 @@ withoutFI p = do
   FI _ tm <- p
   return tm
 
--- -------------
+-------------
 -- Definition Parsing
--- -------------
+-------------
 
--- parseProg :: Parser Prog
--- parseProg = do
---   defs <- many parseDef
---   return $ Prog defs
+parseProg :: Parser Prog
+parseProg = Prog <$> many parseDef
 
--- parseDef :: Parser Def
--- parseDef = pValDef <|> pTyLet <|> pFuncDef
+parseDef :: Parser (FI Def)
+parseDef = choice (withFI <$> [pValDef, pTyLet, pFuncDef])
 
--- pValDef :: Parser Def
--- pValDef =
---   ValDef
---     <$> (symbol "let" *> camelCase)
---     <*> (symbol "=" *> parseTm 0 <* newline)
+pValDef :: Parser Def
+pValDef =
+  ValDef
+    <$> (symbol "let" *> lexeme camelCase)
+    <*> (symbol "=" *> parseTm 0)
 
--- pTyLet :: Parser Def
--- pTyLet =
---   TyLet
---     <$> (symbol "type" *> pascalCase)
---     <*> (symbol "=" *> parseTy 0 <* newline)
+pTyLet :: Parser Def
+pTyLet =
+  TyLet
+    <$> (symbol "type" *> lexeme pascalCase)
+    <*> (symbol "=" *> parseTy 0)
 
--- pFuncDef :: Parser Def
--- pFuncDef =
---   FuncDef
---     <$> (symbol "function" *> camelCase)
---     <*> paren (sepBy (parsePttrn 0) (symbol ","))
---     <*> optional (symbol "=>" *> parseTy 0)
---     <*> (parseTm 0 <* newline)
+pFuncDef :: Parser Def
+pFuncDef =
+  FuncDef
+    <$> (symbol "function" *> lexeme camelCase)
+    <*> paren (sepBy (parsePttrn 0) (symbol ","))
+    <*> optional (symbol "=>" *> parseTy 0)
+    <*> parseTm 0
 
 -- -------------
 -- Term Parsing
@@ -178,15 +176,15 @@ pTuple :: Parser Tm
 pTuple = Tuple <$> bracket (sepBy (parseTm 1) (symbol ","))
 
 pProj :: Parser Tm
-pProj = Proj <$> parseTm 6 <*> (symbol "." *> camelCase)
+pProj = Proj <$> parseTm 6 <*> (symbol "." *> lexeme camelCase)
 
 pAnn :: Parser Tm
 pAnn = Ann <$> parseTm 5 <*> (symbol "as" *> parseTy 0)
 
 pRcd :: Parser Tm
-pRcd = Rcd <$> brace (sepBy parseFld (symbol ","))
+pRcd = Rcd <$> brace (sepBy parseFld (symbol ";"))
   where
-    parseFld = (,) <$> camelCase <*> (symbol ":" *> parseTm 0)
+    parseFld = (,) <$> lexeme camelCase <*> (symbol "=" *> parseTm 1)
 
 -- -------------
 -- Pattern Parsing
@@ -236,9 +234,9 @@ pTyTuple :: Parser Ty
 pTyTuple = TyTuple <$> bracket (sepBy (parseTy 0) (symbol ","))
 
 pTyRcd :: Parser Ty
-pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ","))
+pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ";"))
   where
-    parseFld = (,) <$> camelCase <*> (symbol ":" *> parseTy 0)
+    parseFld = (,) <$> lexeme camelCase <*> (symbol ":" *> parseTy 0)
 
 pTyApp :: Parser Ty
 pTyApp =

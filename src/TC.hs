@@ -5,8 +5,8 @@
 
 module TC where
 
+import Context
 import Control.Arrow (Arrow (second), returnA, (>>^), (^>>))
-import Data.List (findIndex, sortOn)
 import qualified Raw as R (Lit (..), Pttrn (..), Tm (..), Ty (..))
 import TCUtils
 import qualified Tm as T (Constr (Constr, bots, tops), Prim (..), Ty (..))
@@ -56,7 +56,8 @@ infer = proc fitm -> do
       t <- tms >- fmapA infer >>^ T.TyTuple
       returnA -< fi t
     R.Rcd rcd -> do
-      t <- sortOn fst rcd >- fmapA (second infer) >>^ T.TyRcd
+      indices <- fmapA (fst ^>> getRecordIndex) -< rcd
+      t <- (rcd !!) <$> indices >- fmapA (second infer) >>^ T.TyRcd
       returnA -< fi t
     R.Proj tm l -> do
       FI _ rcdTy <- infer -< tm
@@ -151,11 +152,7 @@ toTmTy = proc fity -> do
   let FI p ty = fity
   let fi = FI p
   case ty of
-    R.TyVar x -> do
-      vs <- () >- getEnv >>^ vars
-      case findIndex ((== x) . fst) vs of
-        Just i -> returnA -< fi $ T.TyVar i
-        Nothing -> p >- throwWith UnboundVariable
+    R.TyVar x -> tvar -< fi x
     R.TyPrim prim -> returnA -< fi $ T.TyPrim prim
     R.TyArrow tys ty -> do
       tys <- tys >- fmapA toTmTy
@@ -165,7 +162,7 @@ toTmTy = proc fity -> do
       t <- tys >- fmapA toTmTy >>^ T.TyTuple
       returnA -< fi t
     R.TyRcd rcd -> do
-      t <- sortOn fst rcd >- fmapA (second toTmTy) >>^ T.TyRcd
+      t <- rcd >- fmapA (second toTmTy) >>^ T.TyRcd
       returnA -< fi t
     R.TyApp ty tys -> do
       ty <- ty >- toTmTy
@@ -178,3 +175,29 @@ toTmTy = proc fity -> do
     R.TySeq tys -> do
       t <- tys >- fmapA toTmTy >>^ T.TySeq
       returnA -< fi t
+
+var :: FI Name ->> FI T.Ty
+var = proc x -> do
+  env <- getEnv -< ()
+  case lookup (val x) (vars env) of
+    Just ty -> returnA -< ty
+    Nothing -> case lookup (val x) (globalSyms env) of
+      Just (TmExpr (Interpreted t)) -> returnA -< t
+      Just (TmExpr (Uninterpreted t)) -> do
+        ty <- infer -< t
+        let mod = lookupAndReplace (val x) (TmExpr (Interpreted ty))
+        modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
+        returnA -< ty
+      _ -> pos x >- throwWith UnboundVariable
+
+tvar :: FI Name ->> FI T.Ty
+tvar = proc x -> do
+  env <- getEnv -< ()
+  case lookup (val x) (globalSyms env) of
+    Just (TyExpr (Interpreted ty)) -> returnA -< ty
+    Just (TyExpr (Uninterpreted ty)) -> do
+      ty <- toTmTy -< ty
+      let mod = lookupAndReplace (val x) (TyExpr (Interpreted ty))
+      modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
+      returnA -< ty
+    _ -> pos x >- throwWith UnboundTypeVariable

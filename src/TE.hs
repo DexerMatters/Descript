@@ -109,8 +109,11 @@ conv = proc (lhs, rhs) -> do
     _ -> returnA -< False
   where
     go = proc (r1, r2) -> case (r1, r2) of
-      (_, []) -> returnA -< True
-      ([], _) -> returnA -< False
+      -- Row subtyping
+      ([], []) -> returnA -< True
+      (_ : _, []) -> returnA -< False
+      ([], _ : _) -> returnA -< True
+      -- Depth subtyping
       ((l1, t1) : r1', (l2, t2) : r2')
         | l1 == l2 -> do
             b <- conv -< (t1, t2)
