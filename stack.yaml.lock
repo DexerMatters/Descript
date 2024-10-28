@@ -19,6 +19,13 @@ packages:
   original:
     hackage: mtl-2.3.1
 - completed:
+    hackage: containers-0.6.7@sha256:4aad61c33b21e453e5d18a465e674898fded282f233ffd154b48acc540c89537,2655
+    pantry-tree:
+      sha256: d3430bcc4beafe609d6c5cd4a607549ee4ffe0eafc2ebb9c87b5e7b1b20b24d8
+      size: 2902
+  original:
+    hackage: containers-0.6.7
+- completed:
     hackage: case-insensitive-1.2.1.0@sha256:9dfd3171fc7698cf8d931727d3af3a7b389135b583e46b5adac1f9d2026fff61,2244
     pantry-tree:
       sha256: d6f175b17eacce002fc5336c17e119d989bd97f8ad9702446163c9e27c7c79b7

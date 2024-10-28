@@ -34,10 +34,11 @@ ghc-options:
   - -Wredundant-constraints
 
 library:
-  source-dirs: [src, src/expr]
+  source-dirs: [src, src/expr, src/tc, src/utils]
   dependencies:
     - megaparsec
     - mtl
+    - containers
 
 executables:
   descript-exe:

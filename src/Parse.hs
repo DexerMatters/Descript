@@ -2,33 +2,33 @@
 
 module Parse where
 
-import Control.Applicative (optional, (<|>))
-import Control.Exception ()
-import Data.Functor (($>))
-import Data.Void (Void)
-import Raw (Def (..), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
-import Text.Megaparsec (MonadParsec (notFollowedBy, parseError, try), ParseErrorBundle (..), Parsec, anySingleBut, between, choice, many, sepBy, some)
+import           Control.Applicative (optional, (<|>))
+import           Control.Exception ()
+import           Data.Functor (($>))
+import           Data.Void (Void)
+import           Raw (Def(..), Lit(..), Prog(Prog), Pttrn(..), Tm(..), Ty(..))
+import           Text.Megaparsec (MonadParsec(notFollowedBy, try), Parsec
+                                , anySingleBut, between, choice, many, sepBy
+                                , some)
 import qualified Text.Megaparsec as L
-import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, string, upperChar)
+import           Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar
+                                     , newline, space1, upperChar)
 import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Megaparsec.Debug (MonadParsecDbg (dbg))
-import Text.Megaparsec.Error (ParseError (TrivialError))
-import Tm (Prim (..))
-import Utils (FI (FI), tr)
+import           Text.Megaparsec.Debug (MonadParsecDbg(dbg))
+import           Tm (Prim(..))
+import           Utils (FI(FI))
 
 preserved :: [String]
-preserved =
-  [ "let",
-    "function",
-    "enum",
-    "if",
-    "else",
-    "return",
-    "as",
-    "type",
-    "true",
-    "false"
-  ]
+preserved = [ "let"
+            , "function"
+            , "enum"
+            , "if"
+            , "else"
+            , "return"
+            , "as"
+            , "type"
+            , "true"
+            , "false"]
 
 type Parser = Parsec Void String
 
@@ -48,7 +48,7 @@ camelCase :: Parser String
 camelCase = do
   c <- lowerChar
   cs <- many alphaNumChar
-  let s = c : cs
+  let s = c:cs
   if s `elem` preserved
     then fail $ "Keyword " ++ s ++ " is preserved"
     else return s
@@ -57,7 +57,7 @@ pascalCase :: Parser String
 pascalCase = do
   c <- upperChar
   cs <- many alphaNumChar
-  let s = c : cs
+  let s = c:cs
   if s `elem` preserved
     then fail $ "Keyword " ++ s ++ " is preserved"
     else return s
@@ -94,36 +94,27 @@ parseDef :: Parser (FI Def)
 parseDef = choice (withFI <$> [pValDef, pTyLet, pFuncDef, pEnumDef])
 
 pValDef :: Parser Def
-pValDef =
-  ValDef
-    <$> (symbol "let" *> lexeme camelCase)
-    <*> (symbol "=" *> parseTm 0)
+pValDef = ValDef <$> (symbol "let" *> lexeme camelCase)
+  <*> (symbol "=" *> parseTm 0)
 
 pTyLet :: Parser Def
-pTyLet =
-  TyLet
-    <$> (symbol "type" *> lexeme pascalCase)
-    <*> (symbol "=" *> parseTy 0)
+pTyLet = TyLet <$> (symbol "type" *> lexeme pascalCase)
+  <*> (symbol "=" *> parseTy 0)
 
 pFuncDef :: Parser Def
-pFuncDef =
-  FuncDef
-    <$> (symbol "function" *> lexeme camelCase)
-    <*> paren (sepBy (parsePttrn 0) (symbol ","))
-    <*> optional (symbol "=>" *> parseTy 0)
-    <*> parseTm 0
+pFuncDef = FuncDef <$> (symbol "function" *> lexeme camelCase)
+  <*> paren (sepBy (parsePttrn 0) (symbol ","))
+  <*> optional (symbol "=>" *> parseTy 0)
+  <*> parseTm 0
 
 pEnumDef :: Parser Def
-pEnumDef =
-  EnumDef
-    <$> (symbol "enum" *> lexeme pascalCase)
-    <*> ((symbol "<" *> sepBy (lexeme pascalCase) (symbol ",") <* symbol ">") <|> pure [])
-    <*> (symbol "=" *> sepBy parseFld (symbol "|"))
+pEnumDef = EnumDef <$> (symbol "enum" *> lexeme pascalCase)
+  <*> ((symbol "<" *> sepBy (lexeme pascalCase) (symbol ",") <* symbol ">")
+       <|> pure [])
+  <*> (symbol "=" *> sepBy parseFld (symbol "|"))
   where
-    parseFld =
-      (,)
-        <$> lexeme camelCase
-        <*> (paren (sepBy (parseTy 0) (symbol ",")) <|> pure [])
+    parseFld = (,) <$> lexeme camelCase
+      <*> (paren (sepBy (parseTy 0) (symbol ",")) <|> pure [])
 
 -- -------------
 -- Term Parsing
@@ -136,14 +127,26 @@ d = dbg "Parsing::\n"
 parseTm :: Int -> Parser FITm
 parseTm p = choice l
   where
-    l = drop p $ try . withFI <$> [pLet, pApp, pLam, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pMacro, pLit, pVar, pParen]
+    l = drop p
+      $ try . withFI
+      <$> [ pLet
+          , pApp
+          , pLam
+          , pCond
+          , pAnn
+          , pProj
+          , pTuple
+          , pRcd
+          , pSeq
+          , pMacro
+          , pLit
+          , pVar
+          , pParen]
 
 pParen :: Parser Tm
-pParen =
-  (symbol "(" <* notFollowedBy (symbol ")"))
-    *> (withoutFI . parseTm) 0
-    <* symbol ")"
-    <* notFollowedBy (symbol "=>")
+pParen = (symbol "(" <* notFollowedBy (symbol ")")) *> (withoutFI . parseTm) 0
+  <* symbol ")"
+  <* notFollowedBy (symbol "=>")
 
 pVar :: Parser Tm
 pVar = Var <$> lexeme camelCase
@@ -152,19 +155,18 @@ pLit :: Parser Tm
 pLit = Lit <$> (choice . fmap try) [pNum, pBool, pStr, pUnit]
   where
     pNum = LitNum . read <$> lexeme (some digitChar)
-    pBool =
-      LitBool
-        <$> (symbol "true" $> True <|> symbol "false" $> False)
-        <* notFollowedBy alphaNumChar
+
+    pBool = LitBool <$> (symbol "true" $> True <|> symbol "false" $> False)
+      <* notFollowedBy alphaNumChar
+
     pStr = LitStr <$> lexeme (char '"' *> many (anySingleBut '"') <* char '"')
+
     pUnit = LitUnit <$ symbol "()"
 
 pLam :: Parser Tm
-pLam =
-  Lam
-    <$> paren (sepBy (parsePttrn 0) (symbol ","))
-    <*> (symbol "=>" *> optional (parseTy 0))
-    <*> parseTm 1
+pLam = Lam <$> paren (sepBy (parsePttrn 0) (symbol ","))
+  <*> (symbol "=>" *> optional (parseTy 0))
+  <*> parseTm 1
 
 pSeq :: Parser Tm
 pSeq = Seq <$> brace (sepBy (parseTm 0) (symbol ";"))
@@ -173,18 +175,14 @@ pApp :: Parser Tm
 pApp = App <$> parseTm 8 <*> paren (sepBy (parseTm 1) (symbol ","))
 
 pLet :: Parser Tm
-pLet =
-  Let
-    <$> (symbol "let" *> parsePttrn 0)
-    <*> (symbol "=" *> parseTm 1)
-    <*> (ws *> parseTm 0)
+pLet = Let <$> (symbol "let" *> parsePttrn 0)
+  <*> (symbol "=" *> parseTm 1)
+  <*> (ws *> parseTm 0)
 
 pCond :: Parser Tm
-pCond =
-  Cond
-    <$> (symbol "if" *> paren (parseTm 0))
-    <*> parseTm 0
-    <*> (optional newline *> symbol "else" *> parseTm 0)
+pCond = Cond <$> (symbol "if" *> paren (parseTm 0))
+  <*> parseTm 0
+  <*> (optional newline *> symbol "else" *> parseTm 0)
 
 pTuple :: Parser Tm
 pTuple = Tuple <$> bracket (sepBy (parseTm 1) (symbol ","))
@@ -201,10 +199,8 @@ pRcd = Rcd <$> brace (sepBy parseFld (symbol ","))
     parseFld = (,) <$> lexeme camelCase <*> (symbol "=" *> parseTm 1)
 
 pMacro :: Parser Tm
-pMacro =
-  Macro
-    <$> lexeme camelCase
-    <*> (symbol "!(" *> parseTm 0 <* symbol ")")
+pMacro = Macro <$> lexeme camelCase
+  <*> (symbol "!(" *> parseTm 0 <* symbol ")")
 
 -- -------------
 -- Pattern Parsing
@@ -212,7 +208,8 @@ pMacro =
 type FIPttrn = FI Pttrn
 
 parsePttrn :: Int -> Parser FIPttrn
-parsePttrn p = choice $ drop p $ try . withFI <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
+parsePttrn
+  p = choice $ drop p $ try . withFI <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
 
 pPttrnAtom :: Parser Pttrn
 pPttrnAtom = PttrnAtom <$> lexeme camelCase
@@ -229,26 +226,24 @@ pPttrnAnn = PttrnAnn <$> parsePttrn 1 <*> (symbol ":" *> parseTy 0)
 type FITy = FI Ty
 
 parseTy :: Int -> Parser FITy
-parseTy p = choice $ drop p $ try . withFI <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
+parseTy p = choice
+  $ drop p
+  $ try . withFI <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
 
 pTyVar :: Parser Ty
 pTyVar = TyVar <$> lexeme pascalCase
 
 pTyPrim :: Parser Ty
-pTyPrim =
-  TyPrim
-    <$> choice
-      [ PrimNum <$ symbol "Number",
-        PrimBool <$ symbol "Bool",
-        PrimStr <$ symbol "String",
-        PrimUnit <$ symbol "Unit"
-      ]
+pTyPrim = TyPrim
+  <$> choice
+    [ PrimNum <$ symbol "Number"
+    , PrimBool <$ symbol "Bool"
+    , PrimStr <$ symbol "String"
+    , PrimUnit <$ symbol "Unit"]
 
 pTyArrow :: Parser Ty
-pTyArrow =
-  TyArrow
-    <$> paren (sepBy (parseTy 0) (symbol ","))
-    <*> (symbol "->" *> parseTy 0)
+pTyArrow = TyArrow <$> paren (sepBy (parseTy 0) (symbol ","))
+  <*> (symbol "->" *> parseTy 0)
 
 pTyTuple :: Parser Ty
 pTyTuple = TyTuple <$> bracket (sepBy (parseTy 0) (symbol ","))
@@ -259,7 +254,5 @@ pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ","))
     parseFld = (,) <$> lexeme camelCase <*> (symbol ":" *> parseTy 0)
 
 pTyApp :: Parser Ty
-pTyApp =
-  TyApp
-    <$> parseTy 2
-    <*> between (symbol "<") (symbol ">") (sepBy (parseTy 0) (symbol ","))
+pTyApp = TyApp <$> parseTy 2
+  <*> between (symbol "<") (symbol ">") (sepBy (parseTy 0) (symbol ","))

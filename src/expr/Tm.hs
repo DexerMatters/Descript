@@ -1,83 +1,78 @@
 {-# LANGUAGE InstanceSigs #-}
+
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module Tm where
 
-import Data.List (intercalate)
-import Utils (FI, PrettyShow (prettyShow))
+import           Data.List (intercalate)
+import           Utils (FI)
 
 type FITy = FI Ty
 
-data Ty
-  = -- Explicit types
-    TyVar Int
-  | TyPrim Prim
-  | TyArrow [FITy] FITy
-  | TyTuple [FITy]
-  | TyRcd [(Label, FITy)]
-  | TyApp FITy [FITy]
-  | -- Generated types
-    TyLam Int FITy
-  | TyCast FITy FITy
-  | TyBiCast FITy FITy
-  | TySeq [FITy]
-  | TyMacro String FITy
-  deriving (Show)
+data Ty = -- Explicit types
+          TyVar Int
+        | TyPrim Prim
+        | TyArrow [FITy] FITy
+        | TyTuple [FITy]
+        | TyRcd [(Label, FITy)]
+        | TyApp FITy [FITy]
+          -- Generated types
+        | TyLam Int FITy
+        | TyCast FITy FITy
+        | TyBiCast FITy FITy
+        | TySeq [FITy]
+        | TyMacro String FITy
 
-data Kind
-  = KAtom
-  | KArrow Kind Kind
+data Prim = PrimNum
+          | PrimBool
+          | PrimStr
+          | PrimUnit
+          | PrimUDT String
 
-data Prim
-  = PrimNum
-  | PrimBool
-  | PrimStr
-  | PrimUnit
-  | LitUDT String
-  deriving (Show, Eq)
-
-data Pttrn
-  = PttrnAtom String
-  | PttrnAnn Pttrn FITy
-  | PttrnTuple [Pttrn]
+data Pttrn = PttrnAtom String
+           | PttrnAnn Pttrn FITy
+           | PttrnTuple [Pttrn]
   deriving (Show)
 
 -- Other types
 
 type Label = String
 
-data Constr = Constr {tops :: [FITy], bots :: [FITy]} deriving (Show)
+data Constr = Constr { tops :: [Ty], bots :: [Ty] }
 
 emptyConstr :: Constr
 emptyConstr = Constr [] []
 
-instance PrettyShow Prim where
-  prettyShow :: Prim -> String
-  prettyShow PrimNum = "Number"
-  prettyShow PrimBool = "Bool"
-  prettyShow PrimStr = "String"
-  prettyShow PrimUnit = "Unit"
-  prettyShow (LitUDT s) = s
+instance Show Prim where
+  show :: Prim -> String
+  show PrimNum = "Number"
+  show PrimBool = "Bool"
+  show PrimStr = "String"
+  show PrimUnit = "Unit"
+  show (PrimUDT s) = s
 
-instance PrettyShow Ty where
-  prettyShow :: Ty -> String
-  prettyShow (TyVar i) = "%T" ++ show i
-  prettyShow (TyPrim p) = prettyShow p
-  prettyShow (TyArrow tys ty) = "(" ++ intercalate ", " (map prettyShow tys) ++ ") -> " ++ prettyShow ty
-  prettyShow (TyTuple tys) = "(" ++ intercalate ", " (map prettyShow tys) ++ ")"
-  prettyShow (TyRcd rcd) = "Record{" ++ unwords (map (\(l, t) -> l ++ ": " ++ prettyShow t ++ "; ") rcd) ++ "}"
-  prettyShow (TyApp ty tys) = prettyShow ty ++ "<<" ++ intercalate ", " (map prettyShow tys) ++ ">>"
-  prettyShow (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ prettyShow ty
-  prettyShow (TyCast ty1 ty2) = prettyShow ty1 ++ " => " ++ prettyShow ty2
-  prettyShow (TyBiCast ty1 ty2) = prettyShow ty1 ++ " <=> " ++ prettyShow ty2
-  prettyShow (TySeq tys) = "Sequence{" ++ intercalate ", " (map prettyShow tys) ++ "}"
-  prettyShow (TyMacro s ty) = s ++ "!(" ++ prettyShow ty ++ ")"
+instance Show Ty where
+  show :: Ty -> String
+  show (TyVar i) = "%T" ++ show i
+  show (TyPrim p) = show p
+  show (TyArrow tys ty) =
+    "(" ++ intercalate ", " (map show tys) ++ ") -> " ++ show ty
+  show (TyTuple tys) = "(" ++ intercalate ", " (map show tys) ++ ")"
+  show (TyRcd rcd) = "Record{"
+    ++ unwords (map (\(l, t) -> l ++ ": " ++ show t ++ "; ") rcd)
+    ++ "}"
+  show (TyApp ty tys) =
+    show ty ++ "<<" ++ intercalate ", " (map show tys) ++ ">>"
+  show (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ show ty
+  show (TyCast ty1 ty2) = show ty1 ++ " => " ++ show ty2
+  show (TyBiCast ty1 ty2) = show ty1 ++ " <=> " ++ show ty2
+  show (TySeq tys) = "Sequence{" ++ intercalate ", " (map show tys) ++ "}"
+  show (TyMacro s ty) = s ++ "!(" ++ show ty ++ ")"
 
-instance PrettyShow Constr where
-  prettyShow :: Constr -> String
-  prettyShow (Constr ts bs) =
-    "Tops: "
-      ++ intercalate ", " (map prettyShow ts)
-      ++ "\n"
-      ++ " Bots: "
-      ++ intercalate ", " (map prettyShow bs)
+instance Show Constr where
+  show :: Constr -> String
+  show (Constr ts bs) = "Tops: "
+    ++ intercalate ", " (map show ts)
+    ++ "\n"
+    ++ " Bots: "
+    ++ intercalate ", " (map show bs)

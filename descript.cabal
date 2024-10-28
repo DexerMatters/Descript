@@ -25,17 +25,16 @@ source-repository head
 
 library
   exposed-modules:
-      Context
       Lib
       Parse
-      TC
-      TCUtils
-      TE
-      TEUtils
-      Utils
       Raw
       Tm
       Val
+      Checker
+      Pattern
+      Dbg
+      State
+      Utils
   other-modules:
       Paths_descript
   autogen-modules:
@@ -43,9 +42,12 @@ library
   hs-source-dirs:
       src
       src/expr
+      src/tc
+      src/utils
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
     , megaparsec
     , mtl
   default-language: Haskell2010

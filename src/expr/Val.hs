@@ -6,7 +6,7 @@ import Data.List (intercalate)
 import Raw (Name)
 import Tm (Constr, Prim)
 import qualified Tm as T (Ty (..))
-import Utils (EvalState, FI, PrettyShow (prettyShow), genTVarName)
+import Utils (EvalState, FI)
 
 type Border = (FITy, FITy)
 
@@ -14,9 +14,9 @@ type ConstrState = EvalState Tm.Constr Border
 
 type FITy = FI Ty
 
-data Env = Env {types :: [FITy], constrs :: [ConstrState]} deriving (Show)
+data Env = Env {types :: [FITy], constrs :: [ConstrState]}
 
-data Closure = Closure Env (FI T.Ty) deriving (Show)
+data Closure = Closure Env (FI T.Ty)
 
 data Ty
   = TyVar Int
@@ -27,14 +27,13 @@ data Ty
   | TyLam Int Closure
   | TyTop
   | TyBot
-  deriving (Show)
 
-instance PrettyShow Ty where
-  prettyShow (TyVar i) = genTVarName i
-  prettyShow (TyPrim p) = prettyShow p
-  prettyShow (TyArrow tys ty) = "(" ++ intercalate ", " (map prettyShow tys) ++ ") -> " ++ prettyShow ty
-  prettyShow (TyTuple tys) = "(" ++ intercalate ", " (map prettyShow tys) ++ ")"
-  prettyShow (TyRcd tys) = "{" ++ intercalate ", " (map (\(l, t) -> l ++ ": " ++ prettyShow t) tys) ++ "}"
-  prettyShow (TyLam i (Closure _ tms)) = "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ prettyShow tms ++ ">"
-  prettyShow TyTop = "Top"
-  prettyShow TyBot = "Bot"
+instance Show Ty where
+  show (TyVar i) = show i
+  show (TyPrim p) = show p
+  show (TyArrow tys ty) = "(" ++ intercalate ", " (map show tys) ++ ") -> " ++ show ty
+  show (TyTuple tys) = "(" ++ intercalate ", " (map show tys) ++ ")"
+  show (TyRcd tys) = "{" ++ intercalate ", " (map (\(l, t) -> l ++ ": " ++ show t) tys) ++ "}"
+  show (TyLam i (Closure _ tms)) = "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ show tms ++ ">"
+  show TyTop = "Top"
+  show TyBot = "Bot"
