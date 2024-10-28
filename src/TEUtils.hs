@@ -14,6 +14,7 @@ data TEError
   = ImproperBound Pos
   | BadCast Pos (String, String)
   | NotAFunction Pos
+  | UndefinedMacro Pos String
   deriving (Show)
 
 type (->>) = PartialArrow V.Env TEError

@@ -7,18 +7,20 @@ import Control.Exception ()
 import Data.Functor (($>))
 import Data.Void (Void)
 import Raw (Def (..), Lit (..), Prog (Prog), Pttrn (..), Tm (..), Ty (..))
-import Text.Megaparsec (MonadParsec (notFollowedBy, try), Parsec, anySingleBut, between, choice, many, sepBy, some)
+import Text.Megaparsec (MonadParsec (notFollowedBy, parseError, try), ParseErrorBundle (..), Parsec, anySingleBut, between, choice, many, sepBy, some)
 import qualified Text.Megaparsec as L
-import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, upperChar)
+import Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar, newline, space1, string, upperChar)
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Debug (MonadParsecDbg (dbg))
+import Text.Megaparsec.Error (ParseError (TrivialError))
 import Tm (Prim (..))
-import Utils (FI (FI))
+import Utils (FI (FI), tr)
 
 preserved :: [String]
 preserved =
   [ "let",
     "function",
+    "enum",
     "if",
     "else",
     "return",
@@ -89,7 +91,7 @@ parseProg :: Parser Prog
 parseProg = Prog <$> many parseDef
 
 parseDef :: Parser (FI Def)
-parseDef = choice (withFI <$> [pValDef, pTyLet, pFuncDef])
+parseDef = choice (withFI <$> [pValDef, pTyLet, pFuncDef, pEnumDef])
 
 pValDef :: Parser Def
 pValDef =
@@ -111,6 +113,18 @@ pFuncDef =
     <*> optional (symbol "=>" *> parseTy 0)
     <*> parseTm 0
 
+pEnumDef :: Parser Def
+pEnumDef =
+  EnumDef
+    <$> (symbol "enum" *> lexeme pascalCase)
+    <*> ((symbol "<" *> sepBy (lexeme pascalCase) (symbol ",") <* symbol ">") <|> pure [])
+    <*> (symbol "=" *> sepBy parseFld (symbol "|"))
+  where
+    parseFld =
+      (,)
+        <$> lexeme camelCase
+        <*> (paren (sepBy (parseTy 0) (symbol ",")) <|> pure [])
+
 -- -------------
 -- Term Parsing
 -- -------------
@@ -122,7 +136,7 @@ d = dbg "Parsing::\n"
 parseTm :: Int -> Parser FITm
 parseTm p = choice l
   where
-    l = drop p $ try . withFI <$> [pLet, pApp, pLam, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pLit, pVar, pParen]
+    l = drop p $ try . withFI <$> [pLet, pApp, pLam, pCond, pAnn, pProj, pTuple, pRcd, pSeq, pMacro, pLit, pVar, pParen]
 
 pParen :: Parser Tm
 pParen =
@@ -182,9 +196,15 @@ pAnn :: Parser Tm
 pAnn = Ann <$> parseTm 5 <*> (symbol "as" *> parseTy 0)
 
 pRcd :: Parser Tm
-pRcd = Rcd <$> brace (sepBy parseFld (symbol ";"))
+pRcd = Rcd <$> brace (sepBy parseFld (symbol ","))
   where
     parseFld = (,) <$> lexeme camelCase <*> (symbol "=" *> parseTm 1)
+
+pMacro :: Parser Tm
+pMacro =
+  Macro
+    <$> lexeme camelCase
+    <*> (symbol "!(" *> parseTm 0 <* symbol ")")
 
 -- -------------
 -- Pattern Parsing
@@ -234,7 +254,7 @@ pTyTuple :: Parser Ty
 pTyTuple = TyTuple <$> bracket (sepBy (parseTy 0) (symbol ","))
 
 pTyRcd :: Parser Ty
-pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ";"))
+pTyRcd = TyRcd <$> brace (sepBy parseFld (symbol ","))
   where
     parseFld = (,) <$> lexeme camelCase <*> (symbol ":" *> parseTy 0)
 

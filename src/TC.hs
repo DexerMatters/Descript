@@ -1,4 +1,5 @@
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
@@ -25,11 +26,13 @@ infer = proc fitm -> do
       R.LitStr _ -> returnA -< fi $ T.TyPrim T.PrimStr
       R.LitUnit -> returnA -< fi $ T.TyPrim T.PrimUnit
     R.Lam ps ret body -> do
-      l0 <- () >- getEnv >>^ length . vars
+      l0 <- () >- getEnv >>^ length . tvars
       tys <- ps >- fmapA inferPattern
       ret' <- infer -< body
-      l1 <- () >- getEnv >>^ length . vars
-      let abs = T.TyLam (l1 - l0) . fi
+      l1 <- () >- getEnv >>^ length . tvars
+      let abs
+            | l1 /= l0 = T.TyLam (l1 - l0) . fi
+            | otherwise = id
       case ret of
         Just retT -> do
           retT <- toTmTy -< retT
@@ -39,18 +42,29 @@ infer = proc fitm -> do
       FI p' fTy <- infer -< f
       argTys <- args >- fmapA infer
       case fTy of
+        T.TyArrow tys ret
+          | length argTys /= length tys -> p >- throwWith IncorrectParameterCount
+          | otherwise -> do
+              (argTys, tys) >- uncurry zip ^>> fmapA' unify
+              let casts = uncurry T.TyCast <$> zip argTys tys
+              returnA -< fi $ T.TySeq $ (fi <$> casts) ++ [ret]
         T.TyLam n (FI _ (T.TyArrow tys ret))
           | length argTys /= length tys -> p >- throwWith IncorrectParameterCount
           | otherwise -> do
               (argTys, tys) >- uncurry zip ^>> fmapA' unify
-              let casts = uncurry T.TyCast <$> zip tys argTys
-              let s = fi $ T.TySeq $ (fi <$> tr casts) ++ [ret]
-              returnA -< fi $ T.TyApp (fi $ T.TyLam n s) argTys
+              env <- () >- getEnv
+              setEnv -< tr env
+              polyTys <- fmapA matchHoleTypes -< (zip tys argTys)
+              let casts = uncurry T.TyCast <$> zip argTys tys
+              let s = fi $ T.TySeq $ (fi <$> casts) ++ [ret]
+              returnA -< fi $ T.TyApp (fi $ T.TyLam n s) (concat (tr' "PolyTys" polyTys))
         _ -> p' >- throwWith UndefinedBehavior
     R.Ann tm ty -> do
       ty1 <- toTmTy -< ty -- into
       ty2 <- infer -< tm -- from
       unify -< (ty2, ty1)
+      env <- () >- getEnv
+      setEnv -< tr env
       returnA -< fi $ T.TyCast ty2 ty1
     R.Tuple tms -> do
       t <- tms >- fmapA infer >>^ T.TyTuple
@@ -68,34 +82,42 @@ infer = proc fitm -> do
         T.TyLam n (FI _ (T.TyRcd rcd)) -> case lookup l rcd of
           Just ty -> returnA -< fi $ T.TyLam n ty
           Nothing -> p >- throwWith UndefinedField
+        T.TyVar _ -> do
+          newTVar -< "%T." ++ l
+          ty <- () >- getEnv >>^ T.TyVar . subtract 1 . length . tvars
+          unify -< (fi rcdTy, fi $ T.TyRcd [(l, fi ty)])
+          returnA -< fi ty
         _ -> p >- throwWith NotARecord
     R.Cond cnd thn els -> do
       cndTy <- infer -< cnd
       thnTy <- infer -< thn
       elsTy <- infer -< els
-      let fi' = FI (pos cndTy)
+      let fi' = FI (pos $ tr cndTy)
       unify -< (cndTy, fi' $ T.TyPrim T.PrimBool)
       unify -< (thnTy, elsTy)
-      unify -< (elsTy, thnTy)
       let cast = fi' $ T.TyCast cndTy (fi' $ T.TyPrim T.PrimBool)
       returnA -< fi $ T.TySeq [cast, fi $ T.TyBiCast thnTy elsTy]
     R.Seq tms -> do
       t <- tms >- fmapA infer >>^ T.TySeq
       returnA -< fi t
+
+    -- Macros
+    R.Macro x tm -> do
+      ty <- infer -< tm
+      returnA -< fi $ T.TyMacro x ty
     _ -> p >- throwWith UndefinedBehavior
 
 unify :: (FI T.Ty, FI T.Ty) ->> ()
 unify = proc t -> do
-  let (FI p1 ty1, FI p2 ty2) = t
+  let (FI _ ty1, FI p2 ty2) = t
   case (ty1, ty2) of
     (T.TyVar i, T.TyVar j) -> do
       ci <- getTConstr -< i
       cj <- getTConstr -< j
       let bots = T.bots cj ++ T.bots ci
-      let tops = T.tops ci ++ T.tops cj
-      setTConstr -< (i, T.Constr bots tops)
+      setTConstr -< (i, T.Constr bots (T.tops ci))
     (T.TyVar i, ty) -> addBot -< (i, FI p2 ty)
-    (ty, T.TyVar i) -> addTop -< (i, FI p1 ty)
+    -- (ty, T.TyVar i) -> addTop -< (i, FI p1 ty)
     (T.TyTuple tys1, T.TyTuple tys2) ->
       (tys1, tys2) >- uncurry zip ^>> fmapA' unify
     (T.TyArrow tys1 ty1, T.TyArrow tys2 ty2) -> do
@@ -175,6 +197,10 @@ toTmTy = proc fity -> do
     R.TySeq tys -> do
       t <- tys >- fmapA toTmTy >>^ T.TySeq
       returnA -< fi t
+    R.TyLam ns ty -> do
+      fmapA' newTVar -< tr ns
+      ty <- ty >- toTmTy
+      returnA -< fi $ T.TyLam (length ns) ty
 
 var :: FI Name ->> FI T.Ty
 var = proc x -> do
@@ -188,16 +214,56 @@ var = proc x -> do
         let mod = lookupAndReplace (val x) (TmExpr (Interpreted ty))
         modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
         returnA -< ty
+      Just (TmExpr' (Interpreted t)) -> returnA -< t
+      Just (TmExpr' (Uninterpreted t)) -> do
+        ty <- toTmTy -< t
+        let mod = lookupAndReplace (val x) (TmExpr' (Interpreted ty))
+        modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
+        returnA -< ty
       _ -> pos x >- throwWith UnboundVariable
 
 tvar :: FI Name ->> FI T.Ty
 tvar = proc x -> do
   env <- getEnv -< ()
-  case lookup (val x) (globalSyms env) of
-    Just (TyExpr (Interpreted ty)) -> returnA -< ty
-    Just (TyExpr (Uninterpreted ty)) -> do
-      ty <- toTmTy -< ty
-      let mod = lookupAndReplace (val x) (TyExpr (Interpreted ty))
-      modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
-      returnA -< ty
-    _ -> pos x >- throwWith UnboundTypeVariable
+  case lookupIndex (val x) (tvars env) of
+    Just i -> returnA -< FI (pos x) $ T.TyVar i
+    Nothing -> case lookup (val x) (globalSyms env) of
+      Just (TyExpr (Interpreted ty)) -> returnA -< ty
+      Just (TyExpr (Uninterpreted ty)) -> do
+        ty <- toTmTy -< ty
+        let mod = lookupAndReplace (val x) (TyExpr (Interpreted ty))
+        modifyEnv -< \e -> e {globalSyms = mod (globalSyms e)}
+        returnA -< ty
+      _ -> pos x >- throwWith UnboundTypeVariable
+
+matchHoleTypes :: (FI T.Ty, FI T.Ty) ->> [FI T.Ty]
+matchHoleTypes = proc t -> do
+  let (FI _ ty1, FI p2 ty2) = t
+  case (ty1, ty2) of
+    (T.TyVar i, ty) -> do
+      let hd = [FI p2 ty]
+      T.Constr {T.bots = bs} <- getTConstr -< i
+      tys <- map (,FI p2 ty) (tr' "BOts" bs) >- fmapA matchHoleTypes >>^ concat
+      returnA -< hd ++ tys
+    (T.TyApp ty1 tys1, T.TyApp ty2 tys2) -> do
+      tys <- matchHoleTypes -< (ty1, ty2)
+      tys' <- fmapA matchHoleTypes >>^ concat -< (zip tys1 tys2)
+      returnA -< tys' ++ tys
+    (T.TyArrow tys1 ty1, T.TyArrow tys2 ty2) -> do
+      tys <- matchHoleTypes -< (ty1, ty2)
+      tys' <- fmapA matchHoleTypes >>^ concat -< (zip tys1 tys2)
+      returnA -< tys' ++ tys
+    (T.TyCast ty1 ty2, T.TyCast ty3 ty4) -> do
+      tys1 <- matchHoleTypes -< (ty1, ty3)
+      tys2 <- matchHoleTypes -< (ty2, ty4)
+      returnA -< tys1 ++ tys2
+    (T.TyTuple tys1, T.TyTuple tys2) -> do
+      tys <- fmapA matchHoleTypes -< zip tys1 tys2
+      returnA -< concat tys
+    (T.TyRcd rcd1, T.TyRcd rcd2) -> do
+      tys <- fmapA matchHoleTypes -< getRecordIntersection rcd1 rcd2
+      returnA -< concat tys
+    (T.TySeq tys1, T.TySeq tys2) -> do
+      tys <- fmapA matchHoleTypes -< zip tys1 tys2
+      returnA -< concat tys
+    _ -> returnA -< []

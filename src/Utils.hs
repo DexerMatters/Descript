@@ -1,4 +1,5 @@
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
@@ -7,6 +8,7 @@ module Utils where
 import Control.Arrow (Arrow (..), ArrowChoice (left), returnA)
 import Control.Category (Category (..))
 import Control.Monad ((>=>))
+import Data.List (elemIndex)
 import Debug.Trace (trace)
 import Prelude hiding ((.))
 
@@ -45,6 +47,9 @@ instance ArrowChoice (PartialArrow s e) where
 tr :: (Show a) => a -> a
 tr x = trace (show x) x
 
+tr' :: (Show a) => String -> a -> a
+tr' title x = trace ("\ESC[94m[" ++ title ++ "]\t" ++ show x ++ "\ESC[0m") x
+
 lookupAndReplace :: (Eq a) => a -> b -> [(a, b)] -> [(a, b)]
 lookupAndReplace x y [] = [(x, y)]
 lookupAndReplace x y ((x', y') : xs)
@@ -60,6 +65,9 @@ runWithEnv :: PartialArrow s e a b -> s -> a -> Either e (b, s)
 runWithEnv f env x = case runPartialArrow f (env, x) of
   Left e -> Left e
   Right (env', y) -> Right (y, env')
+
+ignore :: PartialArrow s e a ()
+ignore = PartialArrow $ \(env, _) -> Right (env, ())
 
 throw :: e -> PartialArrow s e a b
 throw e = PartialArrow $ \_ -> Left e
@@ -96,6 +104,9 @@ genTVarName i
   | i < 26 = show $ ['a' .. 'z'] !! i
   | otherwise = "t" ++ show i
 
+lookupIndex :: (Eq a) => a -> [(a, b)] -> Maybe Int
+lookupIndex x xs = elemIndex x (fst <$> xs)
+
 getMaxAWith :: PartialArrow s e (b, b) Bool -> PartialArrow s e [b] (Maybe b)
 getMaxAWith f = proc xs -> case xs of
   [] -> returnA -< Nothing
@@ -106,6 +117,12 @@ getMaxAWith f = proc xs -> case xs of
       Just y' -> do
         b <- f -< (x, y')
         returnA -< if b then Just x else Just y'
+
+getRecordIntersection :: [(String, a)] -> [(String, b)] -> [(a, b)]
+getRecordIntersection [] _ = []
+getRecordIntersection ((l, x) : xs) ys = case lookup l ys of
+  Just y -> (x, y) : getRecordIntersection xs ys
+  Nothing -> getRecordIntersection xs ys
 
 instance (Show a) => Show (FI a) where
   show (FI _ x) = show x

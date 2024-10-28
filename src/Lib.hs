@@ -13,6 +13,7 @@ import qualified TE
 import TEUtils (liftEnv)
 import Text.Megaparsec (parseTest, runParser)
 import Utils (PartialArrow (runPartialArrow), PrettyShow (prettyShow), runWithEnv)
+import qualified Val
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"
@@ -39,8 +40,10 @@ someFunc = do
       case runWithEnv infer env0 exprs of
         Left e -> print e
         Right (a, env) -> do
+          printInfo $ prettyShow a
           let env' = liftEnv env
           case runPartialArrow TE.eval (env', a) of
             Left e -> printErr $ show e
-            Right (_, b) -> do
+            Right (env, b) -> do
+              printInfo $ prettyShow $ Val.constrs env
               printInfo $ prettyShow b

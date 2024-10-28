@@ -21,13 +21,19 @@ data Ty
   | TyCast FITy FITy
   | TyBiCast FITy FITy
   | TySeq [FITy]
+  | TyMacro String FITy
   deriving (Show)
+
+data Kind
+  = KAtom
+  | KArrow Kind Kind
 
 data Prim
   = PrimNum
   | PrimBool
   | PrimStr
   | PrimUnit
+  | LitUDT String
   deriving (Show, Eq)
 
 data Pttrn
@@ -51,6 +57,7 @@ instance PrettyShow Prim where
   prettyShow PrimBool = "Bool"
   prettyShow PrimStr = "String"
   prettyShow PrimUnit = "Unit"
+  prettyShow (LitUDT s) = s
 
 instance PrettyShow Ty where
   prettyShow :: Ty -> String
@@ -64,6 +71,7 @@ instance PrettyShow Ty where
   prettyShow (TyCast ty1 ty2) = prettyShow ty1 ++ " => " ++ prettyShow ty2
   prettyShow (TyBiCast ty1 ty2) = prettyShow ty1 ++ " <=> " ++ prettyShow ty2
   prettyShow (TySeq tys) = "Sequence{" ++ intercalate ", " (map prettyShow tys) ++ "}"
+  prettyShow (TyMacro s ty) = s ++ "!(" ++ prettyShow ty ++ ")"
 
 instance PrettyShow Constr where
   prettyShow :: Constr -> String

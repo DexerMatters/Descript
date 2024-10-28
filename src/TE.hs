@@ -6,6 +6,7 @@
 module TE where
 
 import Control.Arrow (returnA, (>>^))
+import TCUtils (TCError (UndefinedBehavior))
 import TEUtils
 import qualified Tm as T
 import Utils
@@ -63,6 +64,10 @@ eval = proc fity -> do
     T.TySeq tys -> do
       tys' <- fmapA eval -< tys
       returnA -< last tys'
+    T.TyMacro "typeOf" ty -> do
+      ty <- eval -< ty
+      returnA -< tr' "Macro/typeOf" ty
+    T.TyMacro x _ -> (p, x) >- throwWith $ uncurry UndefinedMacro
   where
     go = proc rcd -> case rcd of
       [] -> returnA -< []
@@ -73,8 +78,8 @@ eval = proc fity -> do
 
 conv :: (FI V.Ty, FI V.Ty) ->> Bool
 conv = proc (lhs, rhs) -> do
-  let FI p1 val = lhs
-  let FI p2 val' = rhs
+  let FI p1 val = tr lhs
+  let FI p2 val' = tr rhs
   case (val, val') of
     (_, V.TyTop) -> returnA -< True
     (V.TyBot, _) -> returnA -< True
@@ -127,17 +132,10 @@ apply :: ([FI V.Ty], V.Closure) ->> FI V.Ty
 apply = proc (args, V.Closure env tm) -> do
   env0 <- getEnv -< ()
   setEnv -< env
-  fmapA' addType -< tr (reverse $ concatTypes args)
+  fmapA' addType -< reverse args
   ty <- eval -< tm
   setEnv -< env0
   returnA -< ty
-
-concatTypes :: [FI V.Ty] -> [FI V.Ty]
-concatTypes = foldr go []
-  where
-    go (FI _ (V.TyTuple ts1)) acc = ts1 ++ acc
-    go (FI _ (V.TyRcd rcd1)) acc = fmap snd rcd1 ++ acc
-    go ty acc = ty : acc
 
 getBorder :: Int ->> V.Border
 getBorder = proc i -> do

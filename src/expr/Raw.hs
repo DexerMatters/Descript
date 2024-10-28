@@ -8,10 +8,13 @@ import Utils (FI)
 -- Syntax
 newtype Prog = Prog [FI Def] deriving (Show)
 
+type EnumField = (String, [FITy])
+
 data Def
   = FuncDef Name [FI Pttrn] (Maybe (FI Ty)) (FI Tm)
   | ValDef Name (FI Tm)
   | TyLet Name (FI Ty)
+  | EnumDef Name [String {- Type Variables -}] [EnumField]
   deriving (Show)
 
 data Tm
@@ -26,6 +29,8 @@ data Tm
   | Ann FITm FITy
   | Seq [FITm]
   | Rcd [(Label, FITm)]
+  | -- Primitive operations
+    Macro Name FITm
   deriving (Show)
 
 data Ty
@@ -39,6 +44,7 @@ data Ty
   | -- Generated types
     TyCast FITy FITy
   | TySeq [FITy]
+  | TyLam [Name] FITy
   deriving (Show)
 
 -- Other types

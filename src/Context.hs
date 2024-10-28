@@ -10,6 +10,7 @@ import Utils
 data Expr
   = TyExpr (EvalState (FI R.Ty) (FI T.Ty))
   | TmExpr (EvalState (FI R.Tm) (FI T.Ty))
+  | TmExpr' (EvalState (FI R.Ty) (FI T.Ty))
   deriving (Show)
 
 type DumpedProgram = [(String, Expr)]
@@ -25,6 +26,15 @@ dumpProgram (Prog (def : rest)) =
           (n, TmExpr $ Uninterpreted tm) : dumpProgram (Prog rest)
         TyLet n ty ->
           (n, TyExpr $ Uninterpreted ty) : dumpProgram (Prog rest)
+        EnumDef n polys flds -> flip (++) (dumpProgram (Prog rest)) $ do
+          (fldName, tys') <- flds
+          case tys' of
+            [] -> do
+              let ty = R.TyLam polys (fi $ R.TyPrim $ T.LitUDT n)
+              return (fldName, TmExpr' . Uninterpreted . fi $ ty)
+            tys -> do
+              let ty = R.TyLam polys (fi $ R.TyArrow tys (fi $ R.TyPrim $ T.LitUDT n))
+              return (fldName, TmExpr' . Uninterpreted . fi $ ty)
 dumpProgram (Prog []) = []
 
 getTestEntrance :: DumpedProgram -> FI R.Tm
