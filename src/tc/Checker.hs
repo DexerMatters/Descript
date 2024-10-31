@@ -11,11 +11,13 @@ module Checker where
 import           Control.Monad (zipWithM_)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           Control.Monad.RWS (gets)
-import           Data.Bool (bool)
 import           Pattern
 import qualified Raw as R
 import           State
-import           Tm as T
+import           Tm as T (Ctx(tvars), FITy
+                        , Prim(PrimUnit, PrimNum, PrimBool, PrimStr)
+                        , Ty(TyRcd, TyPrim, TyReduce, TyLam, TyCast, TyVar, TyApp, TyArrow,
+   TyTuple))
 import           Utils
 
 infer :: R.FITm ->> T.FITy
@@ -78,15 +80,15 @@ infer = \case
 unify :: T.FITy -> T.FITy ->> ()
 unify = curry
   $ \case
-    _ :| T.TyVar i :<>: _ :| ty -> addBot i ty
-    _ :| T.TyApp ty tys :<>: _ :| T.TyApp ty' tys' -> do
+    T.TyVar i :<*>: ty -> addBot i ty
+    T.TyApp ty tys :<*>: T.TyApp ty' tys' -> do
       unify ty ty'
       zipWithM_ unify tys tys'
-    _ :| T.TyArrow tys ty :<>: _ :| T.TyArrow tys' ty' -> do
+    T.TyArrow tys ty :<*>: T.TyArrow tys' ty' -> do
       zipWithM_ unify tys tys'
       unify ty ty'
-    _ :| T.TyTuple tys :<>: _ :| T.TyTuple tys' -> zipWithM_ unify tys tys'
-    _ :| T.TyRcd tys :<>: _ :| T.TyRcd tys' -> do
+    T.TyTuple tys :<*>: T.TyTuple tys' -> zipWithM_ unify tys tys'
+    T.TyRcd tys :<*>: T.TyRcd tys' -> do
       let sames = [(t, t') | (l, t) <- tys, (l', t') <- tys', l == l']
       mapM_ (uncurry unify) sames
     _ -> pure ()

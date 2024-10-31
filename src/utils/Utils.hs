@@ -18,7 +18,10 @@ module Utils
     , (&&&)
     , (|||)
     , type (|->)
-    , pattern (:<>:)
+    , pattern (:*:)
+    , pattern (:<*>:)
+    , pattern (:<*:)
+    , pattern (:*>:)
     , pattern (:|)
     , includeByM
     , trEq) where
@@ -43,16 +46,29 @@ instance Functor FI where
   fmap f (FI p x) = FI p (f x)
 
 pattern (:|) :: (Int, Int) -> a -> FI a
-pattern (:|) a b <- FI a b
-  where
-    p :| x = FI p x
+pattern (:|) a b = FI a b
 
 infixr 9 :|
 
-pattern (:<>:) :: a -> b -> (a, b)
-pattern (:<>:) a b = (a, b)
+pattern (:*:) :: a -> b -> (a, b)
+pattern (:*:) a b = (a, b)
 
-infixr 6 :<>:
+pattern (:<*>:) :: a1 -> a2 -> (FI a1, FI a2)
+pattern (:<*>:) a b <- FI _ a :*: FI _ b
+  where
+    (:<*>:) a b = FI undefined a :*: FI undefined b
+
+pattern (:<*:) :: a -> b -> (FI a, b)
+pattern (:<*:) a b <- FI _ a :*: b
+  where
+    (:<*:) a b = FI undefined a :*: b
+
+pattern (:*>:) :: a1 -> a2 -> (a1, FI a2)
+pattern (:*>:) a b <- a :*: FI _ b
+  where
+    (:*>:) a b = a :*: FI undefined b
+
+infixr 6 :*:, :<*:, :<*>:, :*>:
 
 type (|->) = Map
 
@@ -107,17 +123,17 @@ replace xs i e = case splitAt i xs of
   _ -> xs
 
 -- | Check if the second list is the subset of the first list by a monad function
-includeByM :: Monad m => (a -> b -> m Tril) -> [a] -> [b] -> m Tril
+includeByM :: Monad m => (a -> b -> m Bool) -> [a] -> [b] -> m Bool
 includeByM f = go
   where
-    go _ [] = return True'
-    go [] _ = return False'
+    go _ [] = return True
+    go [] _ = return False
     go (x:xs') (y:ys') = do
-      result <- f x y
-      case result of
-        False'  -> return False'
-        Unknown -> return Unknown
-        True'   -> go xs' ys'
+      b <- f x y
+      if b
+        then go xs' ys'
+        else return False
 
 trEq :: Eq a => a -> a -> Tril
 trEq x y = fromBool $ x == y
+

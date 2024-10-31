@@ -8,7 +8,7 @@ module Tm where
 
 import           Data.List (intercalate)
 import           Utils
-import           Data.Map (Map, empty)
+import           Data.Map (empty)
 
 type FITy = FI Ty
 

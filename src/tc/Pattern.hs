@@ -1,7 +1,7 @@
-{-# LANGUAGE LambdaCase     #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TupleSections  #-}
-{-# LANGUAGE TypeOperators  #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
@@ -10,14 +10,14 @@
 
 module Pattern where
 
-import           Control.Monad             (zipWithM)
-import           Control.Monad.Error.Class (MonadError (throwError))
-import           Control.Monad.State.Lazy  (get)
-import           Data.Functor              (($>))
-import qualified Data.Map                  as M
-import           Raw                       as R
+import           Control.Monad (zipWithM)
+import           Control.Monad.Error.Class (MonadError(throwError))
+import           Control.Monad.State.Lazy (get)
+import           Data.Functor (($>))
+import qualified Data.Map as M
+import           Raw as R
 import           State
-import           Tm                        as T
+import           Tm as T
 import           Utils
 
 inferPattern :: FI R.Pttrn ->> FI T.Ty
@@ -30,9 +30,9 @@ inferPattern = \case
 checkPattern :: FI R.Pttrn -> FI T.Ty ->> FI T.Ty
 checkPattern = curry
   $ \case
-    _ :| R.PttrnAtom x :<>: p :| ty -> FI p <$> newVar x ty
-    c@(_ :| R.PttrnAnn _ _ :<>: _) -> throwError $ uncurry BadPattern c
-    _ :| R.PttrnTuple ps :<>: p
+    R.PttrnAtom x :<*: p :| ty -> FI p <$> newVar x ty
+    c@(R.PttrnAnn _ _ :<*: _) -> throwError $ uncurry BadPattern c
+    R.PttrnTuple ps :<*: p
       :| T.TyTuple tys -> zipWithM checkPattern ps tys $> p :| T.TyTuple tys
     c -> throwError $ uncurry BadPattern c
 

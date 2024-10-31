@@ -16,7 +16,7 @@ type FITy = FI Ty
 
 data TCtx = TCtx { border :: [ConstrState], types :: [Ty] }
 
-data Closure = Closure TCtx (FI T.Ty)
+data Closure = Closure { env :: TCtx, body :: FI T.Ty }
 
 data Ty = TyVar Int
         | TyPrim Prim

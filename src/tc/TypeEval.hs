@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE LambdaCase #-}
+
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module TypeEval where
 
@@ -8,40 +9,75 @@ import qualified Val as V
 import qualified Tm as T
 import           State
 import           Utils
-import           Control.Monad.State (gets, evalState, modify
-                                    , MonadState(get, put))
+import           Control.Monad.State (gets, modify, MonadState(get, put))
 import           Control.Monad (foldM, zipWithM)
 import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
-import           Control.Arrow (Arrow(second))
 
-eval :: T.FITy --> V.Ty
+eval :: T.FITy --> V.FITy
 eval = undefined
 
-(=>>) :: T.FITy -> T.FITy --> V.Ty
-(=>>) = undefined
+-- | Convert a type to another possible type
+(=>>) :: T.FITy -> T.FITy --> V.FITy
+(=>>) a b = do
+  a' <- eval a
+  b' <- eval b
+  t <- a' <: b'
+  bool (throwError $ BadCast a' b') (return b') t
 
-(<:) :: V.Ty -> V.Ty --> Tril
+-- | Compare two types. Check if rhs is a subtype of lhs,
+--   which is to say lhs is more general than rhs.
+(<:) :: V.FITy -> V.FITy --> Bool
 (<:) = curry
   $ \case
-    V.TyBot :<>: _ -> return True'
-    _ :<>: V.TyTop -> return True'
-    V.TyPrim p1 :<>: V.TyPrim p2 -> return $ fromBool $ p1 == p2
-    V.TyTuple tys :<>: V.TyTuple tys' -> allT
-      <$> zipWithM (<:) (val <$> tys) (val <$> tys')
-    V.TyRcd flds :<>: V.TyRcd flds' -> do
-      let f (l, a) (l', b) = ((&&&)) (l `trEq` l') <$> (a <: b)
-      let flds1 = second val <$> flds
-      let flds2 = second val <$> flds'
-      includeByM f flds1 flds2
-    V.TyArrow tys ty :<>: V.TyArrow tys' ty' -> do
-      tys'' <- zipWithM (<:) (val <$> tys) (val <$> tys')
-      ty'' <- val ty <: val ty'
-      return $ allT (ty'':tys'')
-    V.TyLam i (V.Closure env tm) :<>: V.TyLam i' (V.Closure env' tm') -> do
-      
+    --  Top is a supertype of all types
+    V.TyBot :<*>: _ -> return True
+    -- Bot is a subtype of all types
+    _ :<*>: V.TyTop -> return True
+    -- Different primitive types do not differ in generality
+    V.TyPrim p1 :<*>: V.TyPrim p2 -> return $ p1 == p2
+    p :| V.TyVar i :*: p' :| V.TyVar j -> do
+      (top, bot) <- evalBorder (p :| i)
+      (top', bot') <- evalBorder (p' :| j)
+      b <- top' <: top
+      b' <- bot <: bot'
+      return $ b && b'
+    V.TyTuple tys :<*>: V.TyTuple tys' -> and <$> zipWithM (<:) tys tys'
+    -- Record A is a subtype of record B only if
+    -- - A's domain is a subset of B's
+    -- - For each label l in A, A[l] <: B[l]
+    V.TyRcd flds :<*>: V.TyRcd flds' -> do
+      let f (l, a) (l', b) = (&&) (l == l') <$> (a <: b)
+      includeByM f flds flds'
+    -- A function type A -> B is a subtype of C -> D only if
+    -- - C <: A (contravariant)
+    -- - B <: D (covariant)
+    V.TyArrow tys ty :<*>: V.TyArrow tys' ty' -> do
+      tys'' <- zipWithM (<:) tys' tys -- Contravariant
+      ty'' <- ty <: ty' -- Covariant
+      return $ and (ty'':tys'')
+    -- A polymorphic type can be compared when instantiated with variables
+    V.TyLam i cls :<*>: V.TyLam i' cls' -> do
+      ret <- apply cls (extendCtx cls i)
+      ret' <- apply cls' (extendCtx cls' i')
+      ret <: ret'
+    V.TyLam i cls :<*: p' :| ty -> do
+      ret <- apply cls (extendCtx cls i)
+      ret <: FI p' ty
+    p :| ty :*>: V.TyLam i cls -> do
+      let base = length . V.types $ V.env cls
+      let vars = V.TyVar <$> [base .. base + i - 1]
+      ret <- apply cls vars
+      FI p ty <: ret
+    _ -> return False
+  where
+    -- | Introduce the type variables to the context
+    extendCtx :: V.Closure -> Int -> [V.Ty]
+    extendCtx (V.Closure env _) i = let base = length . V.types $ env
+                                    in V.TyVar <$> [base .. base + i - 1]
 
-apply :: V.Closure -> [V.Ty] --> V.Ty
+-- | Reduce a closure by providing the arguments
+apply :: V.Closure -> [V.Ty] --> V.FITy
 apply (V.Closure env tm) args = do
   env0 <- get
   put $ env { V.types = reverse args ++ V.types env }
@@ -49,8 +85,8 @@ apply (V.Closure env tm) args = do
   put env0
   return res
 
-  -- Switch to the environment of the closure
-
+-- | Get the border of a type variable while 
+--   evaluating and normalizing its constraints
 evalBorder :: FI Int --> V.Border
 evalBorder (p :| i) = do
   bdrs <- gets V.border
@@ -68,15 +104,21 @@ evalBorder (p :| i) = do
       --       should be evaluated (to be a TCtx)
       tops' <- mapM eval (FI p <$> tops)
       bots' <- mapM eval (FI p <$> bots)
-      top <- foldM (botmost c) V.TyBot tops'
-      bot <- foldM (topmost c) V.TyTop bots'
-      return (p :| top, p :| bot)
+      top <- foldM (botmost c) (p :| V.TyBot) tops'
+      bot <- foldM (topmost c) (p :| V.TyTop) bots'
+      return (top, bot)
 
     -- | Compute the topmost type of two types
-    topmost c lhs rhs = lhs <: rhs
-      >>= tril (return lhs) (return rhs) (throwError $ BadConstraint $ p :| c)
+    topmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
+      >>= \case
+        (True, _)      -> return lhs
+        (False, True)  -> return rhs
+        (False, False) -> throwError $ BadConstraint $ p :| c
 
     -- | Compute the botmost type of two types
-    botmost c lhs rhs = lhs <: rhs
-      >>= tril (return rhs) (return lhs) (throwError $ BadConstraint $ p :| c)
+    botmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
+      >>= \case
+        (_, True)      -> return lhs
+        (True, False)  -> return rhs
+        (False, False) -> throwError $ BadConstraint $ p :| c
 evalBorder _ = error "impossible"
