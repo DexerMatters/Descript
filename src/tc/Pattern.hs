@@ -1,38 +1,39 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase     #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TupleSections  #-}
+{-# LANGUAGE TypeOperators  #-}
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use <&>" #-}
 
 module Pattern where
 
-import           Control.Monad (zipWithM)
-import           Control.Monad.Error.Class (MonadError(throwError))
-import           Control.Monad.State.Lazy (get)
-import           Data.Functor (($>))
-import qualified Data.Map as M
-import           Raw as R
+import           Control.Monad             (zipWithM)
+import           Control.Monad.Error.Class (MonadError (throwError))
+import           Control.Monad.State.Lazy  (get)
+import           Data.Functor              (($>))
+import qualified Data.Map                  as M
+import           Raw                       as R
 import           State
-import           Tm as T
+import           Tm                        as T
 import           Utils
 
-inferPattern :: FI R.Pttrn ->> T.Ty
+inferPattern :: FI R.Pttrn ->> FI T.Ty
 inferPattern = \case
-  _ :| R.PttrnAtom x -> newTVar x T.emptyConstr >>= newVar x
+  p :| R.PttrnAtom x -> newTVar x T.emptyConstr >>= newVar x >>= pure . FI p
   _ :| R.PttrnAnn pttrn ty -> indexType ty >>= checkPattern pttrn
-  p :| R.PttrnTuple ps -> do
-    tys <- mapM inferPattern ps
-    pure $ T.TyTuple (FI p <$> tys)
+  p :| R.PttrnTuple ps -> mapM inferPattern ps >>= pure . FI p . T.TyTuple
   FI _ _ -> error "impossible"
 
-checkPattern :: FI R.Pttrn -> FI T.Ty ->> T.Ty
+checkPattern :: FI R.Pttrn -> FI T.Ty ->> FI T.Ty
 checkPattern = curry
   $ \case
-    _ :| R.PttrnAtom x :<>: _ :| ty -> newVar x ty
+    _ :| R.PttrnAtom x :<>: p :| ty -> FI p <$> newVar x ty
     c@(_ :| R.PttrnAnn _ _ :<>: _) -> throwError $ uncurry BadPattern c
-    _ :| R.PttrnTuple ps :<>: _
-      :| T.TyTuple tys -> zipWithM checkPattern ps tys $> T.TyTuple tys
+    _ :| R.PttrnTuple ps :<>: p
+      :| T.TyTuple tys -> zipWithM checkPattern ps tys $> p :| T.TyTuple tys
     c -> throwError $ uncurry BadPattern c
 
 indexType :: FI R.Ty ->> FI T.Ty
@@ -59,9 +60,6 @@ indexType = \case
     mapM_ (`newTVar` T.emptyConstr) names
     body' <- indexType body
     pure $ p :| T.TyLam (length names) body'
-  p :| R.TySeq tys -> do
-    tys' <- mapM indexType tys
-    pure $ p :| T.TySeq tys'
   p :| R.TyApp ty tys -> do
     ty' <- indexType ty
     tys' <- mapM indexType tys
