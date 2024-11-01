@@ -83,3 +83,4 @@ data TCError = UnboundVar (FI R.Name)
 data TEError = BadCast V.FITy V.FITy
              | Unimplemented (FI String)
              | BadConstraint (FI T.Constr)
+             | NonDeducibleArgumentType V.FITy

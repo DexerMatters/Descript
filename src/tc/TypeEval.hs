@@ -3,6 +3,8 @@
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
+{-# LANGUAGE TupleSections #-}
+
 module TypeEval where
 
 import qualified Val as V
@@ -10,20 +12,52 @@ import qualified Tm as T
 import           State
 import           Utils
 import           Control.Monad.State (gets, modify, MonadState(get, put))
-import           Control.Monad (foldM, zipWithM)
+import           Control.Monad (foldM, zipWithM, zipWithM_)
 import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
+import           GHC.Base (join)
 
 eval :: T.FITy --> V.FITy
-eval = undefined
+eval = \case
+  p :| T.TyVar i        -> do
+    env <- gets V.types
+    return $ p :| env !! i
+  p :| T.TyPrim prim    -> return $ p :| V.TyPrim prim
+  p :| T.TyArrow tys ty -> do
+    tys' <- mapM eval tys
+    ty' <- eval ty
+    return $ p :| V.TyArrow tys' ty'
+  p :| T.TyTuple tys    -> do
+    tys' <- mapM eval tys
+    return $ p :| V.TyTuple tys'
+  p :| T.TyRcd flds     -> do
+    flds' <- mapM (\(l, t) -> (l, ) <$> eval t) flds
+    return $ p :| V.TyRcd flds'
+  p :| T.TyLam i cls    -> do
+    env <- get
+    return $ p :| V.TyLam i (V.Closure env cls)
+  _ :| T.TyCast a b     -> join $ cast <$> eval a <*> eval b
+  _ :| T.TyBiCast a b   -> join $ bicast <$> eval a <*> eval b
+  _ :| T.TyReduce f as  -> do
+    func <- eval f
+    args <- mapM eval as
+    case func of
+      _ :| V.TyArrow args' ty -> do
+        zipWithM_ cast args args'
+        return ty
+      _ :| V.TyLam n cls -> do
+        tyArgs <- inferTypeArgs 
 
 -- | Convert a type to another possible type
-(=>>) :: T.FITy -> T.FITy --> V.FITy
-(=>>) a b = do
-  a' <- eval a
-  b' <- eval b
-  t <- a' <: b'
-  bool (throwError $ BadCast a' b') (return b') t
+cast :: V.FITy -> V.FITy --> V.FITy
+cast a b = a <: b >>= bool (throwError $ BadCast a b) (return b)
+
+bicast :: V.FITy -> V.FITy --> V.FITy
+bicast a b = (,) <$> a <: b <*> b <: a
+  >>= \case
+    (True, True)  -> return b
+    (True, False) -> throwError $ BadCast b a
+    (False, _)    -> throwError $ BadCast a b
 
 -- | Compare two types. Check if rhs is a subtype of lhs,
 --   which is to say lhs is more general than rhs.
@@ -122,3 +156,23 @@ evalBorder (p :| i) = do
         (True, False)  -> return rhs
         (False, False) -> throwError $ BadConstraint $ p :| c
 evalBorder _ = error "impossible"
+
+inferTypeArgs :: V.FITy -> V.FITy --> [V.Ty]
+inferTypeArgs = curry $ \case
+  -- {To be match} :<*>: {Input}
+  p :| V.TyVar i :*>: ty -> do
+    (top, bot) <- evalBorder (p :| i)
+    ts <- inferTypeArgs top ty
+    bs <- inferTypeArgs bot ty
+    return $ ty : ts ++ bs
+  V.TyTuple tys :<*>: V.TyTuple tys' -> 
+    join <$> zipWithM inferTypeArgs tys tys'
+  V.TyRcd flds :<*>: V.TyRcd flds' ->
+    let sames = [(t, t') | (l, t) <- flds, (l', t') <- flds', l == l']
+    in join <$> mapM (uncurry inferTypeArgs) sames
+  V.TyArrow tys ty :<*>: V.TyArrow tys' ty' -> do
+    tys'' <- zipWithM inferTypeArgs tys tys'
+    ty'' <- inferTypeArgs ty ty'
+    return $ ty'' : tys''
+  V.TyLam _ _ :<*>: _ -> throwError $ NonDeducibleArgumentType ty
+  _ :<*>: _ -> return []

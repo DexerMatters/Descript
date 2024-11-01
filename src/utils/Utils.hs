@@ -48,7 +48,7 @@ instance Functor FI where
 pattern (:|) :: (Int, Int) -> a -> FI a
 pattern (:|) a b = FI a b
 
-infixr 9 :|
+infixr 8 :|
 
 pattern (:*:) :: a -> b -> (a, b)
 pattern (:*:) a b = (a, b)
