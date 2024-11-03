@@ -11,7 +11,7 @@ import           Data.Map (lookup, insert, updateAt)
 import           Raw as R
 import           Tm as T
 import           Utils
-import           Val as V hiding (constrs)
+import           Val as V
 import           Prelude hiding (lookup)
 
 --------------------------------------------------------------------------------
@@ -81,6 +81,9 @@ data TCError = UnboundVar (FI R.Name)
              | DissatisfiedParameterCount (FI Int)
 
 data TEError = BadCast V.FITy V.FITy
+             | NotAFunctionType V.FITy
+             | NotATypeFunctionType V.FITy
              | Unimplemented (FI String)
              | BadConstraint (FI T.Constr)
              | NonDeducibleArgumentType V.FITy
+             | DissatisfiedTypeParameterCount (FI Int)

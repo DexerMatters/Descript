@@ -19,34 +19,53 @@ import           GHC.Base (join)
 
 eval :: T.FITy --> V.FITy
 eval = \case
-  p :| T.TyVar i        -> do
+  p :| T.TyVar i -> do
     env <- gets V.types
     return $ p :| env !! i
-  p :| T.TyPrim prim    -> return $ p :| V.TyPrim prim
+  p :| T.TyPrim prim -> return $ p :| V.TyPrim prim
   p :| T.TyArrow tys ty -> do
     tys' <- mapM eval tys
     ty' <- eval ty
     return $ p :| V.TyArrow tys' ty'
-  p :| T.TyTuple tys    -> do
+  p :| T.TyTuple tys -> do
     tys' <- mapM eval tys
     return $ p :| V.TyTuple tys'
-  p :| T.TyRcd flds     -> do
+  p :| T.TyRcd flds -> do
     flds' <- mapM (\(l, t) -> (l, ) <$> eval t) flds
     return $ p :| V.TyRcd flds'
-  p :| T.TyLam i cls    -> do
+  p :| T.TyLam i cls -> do
     env <- get
     return $ p :| V.TyLam i (V.Closure env cls)
-  _ :| T.TyCast a b     -> join $ cast <$> eval a <*> eval b
-  _ :| T.TyBiCast a b   -> join $ bicast <$> eval a <*> eval b
-  _ :| T.TyReduce f as  -> do
+  _ :| T.TyCast a b -> join $ cast <$> eval a <*> eval b
+  _ :| T.TyBiCast a b -> join $ bicast <$> eval a <*> eval b
+  _ :| T.TyReduce f as -> do
     func <- eval f
     args <- mapM eval as
-    case func of
-      _ :| V.TyArrow args' ty -> do
-        zipWithM_ cast args args'
-        return ty
-      _ :| V.TyLam n cls -> do
-        tyArgs <- inferTypeArgs 
+    let aux = \case
+          _ :| V.TyArrow args' ty -> do
+            zipWithM_ cast args args'
+            return ty
+          _ :| V.TyLam i cls -> do
+            ret <- reduce cls i
+            argTypes <- case ret of
+              _ :| V.TyArrow args' _
+                -> join <$> zipWithM inferTypeArgs args' args
+              _ -> throwError $ NotAFunctionType func
+            aux =<< apply cls argTypes
+          _ -> throwError $ NotAFunctionType func
+    aux func
+  _ :| T.TyApp f as -> do
+    tFunc <- eval f
+    tArgs <- mapM eval as
+    case tFunc of
+      _ :| V.TyLam i cls
+        | i == length tArgs -> apply cls (val <$> tArgs)
+      _ -> throwError $ NotATypeFunctionType tFunc
+  _ :| T.TyMacro _ ty -> do
+    eval ty
+  _ -> error "impossible"
+
+        -- With 
 
 -- | Convert a type to another possible type
 cast :: V.FITy -> V.FITy --> V.FITy
@@ -92,23 +111,21 @@ bicast a b = (,) <$> a <: b <*> b <: a
       return $ and (ty'':tys'')
     -- A polymorphic type can be compared when instantiated with variables
     V.TyLam i cls :<*>: V.TyLam i' cls' -> do
-      ret <- apply cls (extendCtx cls i)
-      ret' <- apply cls' (extendCtx cls' i')
+      ret <- reduce cls i
+      ret' <- reduce cls' i'
       ret <: ret'
     V.TyLam i cls :<*: p' :| ty -> do
-      ret <- apply cls (extendCtx cls i)
+      ret <- reduce cls i
       ret <: FI p' ty
     p :| ty :*>: V.TyLam i cls -> do
-      let base = length . V.types $ V.env cls
-      let vars = V.TyVar <$> [base .. base + i - 1]
-      ret <- apply cls vars
+      ret <- reduce cls i
       FI p ty <: ret
     _ -> return False
-  where
-    -- | Introduce the type variables to the context
-    extendCtx :: V.Closure -> Int -> [V.Ty]
-    extendCtx (V.Closure env _) i = let base = length . V.types $ env
-                                    in V.TyVar <$> [base .. base + i - 1]
+
+-- | Introduce the type variables to the context
+extendCtx :: V.Closure -> Int -> [V.Ty]
+extendCtx (V.Closure env _) i = let base = length . V.types $ env
+                                in V.TyVar <$> [base .. base + i - 1]
 
 -- | Reduce a closure by providing the arguments
 apply :: V.Closure -> [V.Ty] --> V.FITy
@@ -118,6 +135,13 @@ apply (V.Closure env tm) args = do
   res <- eval tm
   put env0
   return res
+
+-- | Reduce a closure without providing the arguments
+reduce :: V.Closure -> Int --> V.FITy
+reduce cls@(V.Closure env _) i = do
+  let base = length . V.types $ env
+  let vars = V.TyVar <$> [base .. base + i - 1]
+  apply cls vars
 
 -- | Get the border of a type variable while 
 --   evaluating and normalizing its constraints
@@ -158,21 +182,22 @@ evalBorder (p :| i) = do
 evalBorder _ = error "impossible"
 
 inferTypeArgs :: V.FITy -> V.FITy --> [V.Ty]
-inferTypeArgs = curry $ \case
-  -- {To be match} :<*>: {Input}
-  p :| V.TyVar i :*>: ty -> do
-    (top, bot) <- evalBorder (p :| i)
-    ts <- inferTypeArgs top ty
-    bs <- inferTypeArgs bot ty
-    return $ ty : ts ++ bs
-  V.TyTuple tys :<*>: V.TyTuple tys' -> 
-    join <$> zipWithM inferTypeArgs tys tys'
-  V.TyRcd flds :<*>: V.TyRcd flds' ->
-    let sames = [(t, t') | (l, t) <- flds, (l', t') <- flds', l == l']
-    in join <$> mapM (uncurry inferTypeArgs) sames
-  V.TyArrow tys ty :<*>: V.TyArrow tys' ty' -> do
-    tys'' <- zipWithM inferTypeArgs tys tys'
-    ty'' <- inferTypeArgs ty ty'
-    return $ ty'' : tys''
-  V.TyLam _ _ :<*>: _ -> throwError $ NonDeducibleArgumentType ty
-  _ :<*>: _ -> return []
+inferTypeArgs = curry
+  $ \case
+    -- {To be match} :<*>: {Input}
+    p :| V.TyVar i :*: p' :| ty -> do
+      (top, bot) <- evalBorder (p :| i)
+      ts <- inferTypeArgs top (p' :| ty)
+      bs <- inferTypeArgs bot (p' :| ty)
+      return $ ty:ts ++ bs
+    V.TyTuple tys
+      :<*>: V.TyTuple tys' -> join <$> zipWithM inferTypeArgs tys tys'
+    V.TyRcd flds :<*>: V.TyRcd flds'
+      -> let sames = [(t, t') | (l, t) <- flds, (l', t') <- flds', l == l']
+         in join <$> mapM (uncurry inferTypeArgs) sames
+    V.TyArrow tys ty :<*>: V.TyArrow tys' ty' -> do
+      tys'' <- join <$> zipWithM inferTypeArgs tys tys'
+      ty'' <- inferTypeArgs ty ty'
+      return $ ty'' ++ tys''
+    V.TyLam _ _ :<*: ty -> throwError $ NonDeducibleArgumentType ty
+    _ -> return []
