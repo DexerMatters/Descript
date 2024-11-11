@@ -1,7 +1,8 @@
-let f = (n) => {
-  if (n.p)
-    n.t
-  else
-    n.f
-}
-let test = f({p = true, t = "Hello", f = "World"})
+(
+  (b) => {
+    if (b.bool)
+      b.ifTrue
+    else
+      b.ifFalse
+  }
+)({ bool = 12, ifTrue = "fuck", ifFalse = "shit" })

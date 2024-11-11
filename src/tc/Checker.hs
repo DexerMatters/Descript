@@ -10,15 +10,17 @@ module Checker where
 
 import           Control.Monad (zipWithM_)
 import           Control.Monad.Error.Class (MonadError(throwError))
-import           Control.Monad.RWS (gets)
+import           Control.Monad.RWS (gets, MonadState(get))
 import           Pattern
 import qualified Raw as R
 import           State
 import           Tm as T (Ctx(tvars), FITy
                         , Prim(PrimUnit, PrimNum, PrimBool, PrimStr)
                         , Ty(TyRcd, TyPrim, TyReduce, TyLam, TyCast, TyVar, TyApp, TyArrow,
-   TyTuple))
+   TyTuple, TyBiCast)
+                        , emptyConstr)
 import           Utils
+import           Dbg (traceInfo, printM)
 
 infer :: R.FITm ->> T.FITy
 infer = \case
@@ -43,14 +45,17 @@ infer = \case
       Just ty -> FI p . T.TyCast bodyTy <$> indexType ty
       Nothing -> pure bodyTy
     l <- gets (length . tvars)
+    -- Lock all type variables introduced by the argument patterns and the body
+    -- so that they won't be unified in other scopes
+    mapM_ lockConstr [l0 .. l - 1]
     -- If there is no assigned type variable then it's unnecessary to employ TyLam
     let f
           | l /= l0 = FI p . T.TyLam (l - l0)
           | otherwise = id
     return $ f $ p :| T.TyArrow argTys retTy
   p :| R.App lam args -> do
-    lamTy <- infer lam
     argTys <- mapM infer args
+    lamTy <- infer lam
     case lamTy of
       _ :| T.TyArrow tys _ -> do
         zipWithM_ unify tys argTys
@@ -70,17 +75,35 @@ infer = \case
       p' :| T.TyLam n (_ :| T.TyRcd flds) -> case lookup l flds of
         Just ty -> pure $ p' :| T.TyLam n ty
         Nothing -> throwError $ MissingLabel (p :| l)
+      -- Projection will unify the target with a type variable if possible
+      _ :| T.TyVar i -> do
+        tvar <- newTVar ("%T/proj" ++ l) T.emptyConstr
+        addBot i (T.TyRcd [(l, p :| tvar)])
+        return $ p :| tvar
+      _ -> throwError $ NonProjectableType tarTy
   p :| R.Ann tm ty -> do
     ty' <- indexType ty
     tmTy <- infer tm
-    unify ty' tmTy
+    tvs <- get
+    printM $ show tvs
+    unify tmTy ty'
     return $ p :| T.TyCast tmTy ty'
-  _ -> error "impossible"
+  _ :| R.Seq tms -> do
+    tys <- mapM infer tms
+    return $ last tys
+  p :| R.Cond cnd thn els -> do
+    cndTy <- infer cnd
+    thnTy <- infer thn
+    elsTy <- infer els
+    unify cndTy (p :| T.TyPrim T.PrimBool)
+    unify thnTy elsTy
+    return $ p :| T.TyBiCast thnTy elsTy
+  ty -> error $ "impossible :" ++ show ty
 
 unify :: T.FITy -> T.FITy ->> ()
 unify = curry
   $ \case
-    T.TyVar i :<*>: ty -> addBot i ty
+    T.TyVar i :<*>: ty -> addBot i (traceInfo ty)
     T.TyApp ty tys :<*>: T.TyApp ty' tys' -> do
       unify ty ty'
       zipWithM_ unify tys tys'

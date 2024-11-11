@@ -16,6 +16,7 @@ import           Control.Monad (foldM, zipWithM, zipWithM_)
 import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           GHC.Base (join)
+import           Dbg (traceInfo, printInfo, printM)
 
 eval :: T.FITy --> V.FITy
 eval = \case
@@ -46,12 +47,15 @@ eval = \case
             zipWithM_ cast args args'
             return ty
           _ :| V.TyLam i cls -> do
-            ret <- reduce cls i
-            argTypes <- case ret of
-              _ :| V.TyArrow args' _
-                -> join <$> zipWithM inferTypeArgs args' args
-              _ -> throwError $ NotAFunctionType func
-            aux =<< apply cls argTypes
+            argTypes <- folkEnv
+              $ do
+                ret <- reduce cls i
+                case ret of
+                  _ :| V.TyArrow args' _
+                    -> join <$> zipWithM inferTypeArgs args' args
+                  _ -> throwError $ NotAFunctionType func
+            printM $ "ArgTypes: " ++ show argTypes
+            aux =<< folkEnv (apply cls argTypes)
           _ -> throwError $ NotAFunctionType func
     aux func
   _ :| T.TyApp f as -> do
@@ -84,9 +88,9 @@ bicast a b = (,) <$> a <: b <*> b <: a
 (<:) = curry
   $ \case
     --  Top is a supertype of all types
-    V.TyBot :<*>: _ -> return True
-    -- Bot is a subtype of all types
     _ :<*>: V.TyTop -> return True
+    -- Bot is a subtype of all types
+    V.TyBot :<*>: _ -> return True
     -- Different primitive types do not differ in generality
     V.TyPrim p1 :<*>: V.TyPrim p2 -> return $ p1 == p2
     p :| V.TyVar i :*: p' :| V.TyVar j -> do
@@ -94,6 +98,16 @@ bicast a b = (,) <$> a <: b <*> b <: a
       (top', bot') <- evalBorder (p' :| j)
       b <- top' <: top
       b' <- bot <: bot'
+      return $ b && b'
+    p :| V.TyVar i :*: ty -> do
+      (top, bot) <- evalBorder (p :| i)
+      b <- top <: ty
+      b' <- bot <: ty
+      return $ b && b'
+    ty :*: p :| V.TyVar i -> do
+      (top, bot) <- evalBorder (p :| i)
+      b <- ty <: bot
+      b' <- top <: ty
       return $ b && b'
     V.TyTuple tys :<*>: V.TyTuple tys' -> and <$> zipWithM (<:) tys tys'
     -- Record A is a subtype of record B only if
@@ -111,8 +125,8 @@ bicast a b = (,) <$> a <: b <*> b <: a
       return $ and (ty'':tys'')
     -- A polymorphic type can be compared when instantiated with variables
     V.TyLam i cls :<*>: V.TyLam i' cls' -> do
-      ret <- reduce cls i
-      ret' <- reduce cls' i'
+      ret <- folkEnv $ reduce cls i
+      ret' <- folkEnv $ reduce cls' i'
       ret <: ret'
     V.TyLam i cls :<*: p' :| ty -> do
       ret <- reduce cls i
@@ -130,11 +144,8 @@ extendCtx (V.Closure env _) i = let base = length . V.types $ env
 -- | Reduce a closure by providing the arguments
 apply :: V.Closure -> [V.Ty] --> V.FITy
 apply (V.Closure env tm) args = do
-  env0 <- get
-  put $ env { V.types = reverse args ++ V.types env }
-  res <- eval tm
-  put env0
-  return res
+  put $ env { V.types = args ++ V.types env }
+  eval tm
 
 -- | Reduce a closure without providing the arguments
 reduce :: V.Closure -> Int --> V.FITy
@@ -155,7 +166,7 @@ evalBorder (p :| i) = do
   return (fromInterpreted res)
   where
     -- | Shrink the constraints to the smallest possible border
-    norm c@(T.Constr _ tops bots) = do
+    norm c@(T.Constr _ tops bots _) = do
       -- env0 <- get
       -- TODO: Switch to the environment of the constraint
       --       and evaluate the tops and bots, but environment
@@ -189,6 +200,7 @@ inferTypeArgs = curry
       (top, bot) <- evalBorder (p :| i)
       ts <- inferTypeArgs top (p' :| ty)
       bs <- inferTypeArgs bot (p' :| ty)
+      printM $ show ty ++ "," ++ show bot
       return $ ty:ts ++ bs
     V.TyTuple tys
       :<*>: V.TyTuple tys' -> join <$> zipWithM inferTypeArgs tys tys'
@@ -201,3 +213,4 @@ inferTypeArgs = curry
       return $ ty'' ++ tys''
     V.TyLam _ _ :<*: ty -> throwError $ NonDeducibleArgumentType ty
     _ -> return []
+

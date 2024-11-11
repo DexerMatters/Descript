@@ -44,7 +44,7 @@ data Pttrn = PttrnAtom String
 
 type Label = String
 
-data Constr = Constr { env :: Ctx, tops :: [Ty], bots :: [Ty] }
+data Constr = Constr { env :: Ctx, tops :: [Ty], bots :: [Ty], locked :: Bool }
 
 data Ctx = Ctx { vars :: Name |-> Ty
                , tvars :: Name |-> Constr
@@ -52,12 +52,13 @@ data Ctx = Ctx { vars :: Name |-> Ty
                , globalTypes :: Name |-> Ty
                , globalVars :: Name |-> Ty
                }
+  deriving (Show)
 
 emptyCtx :: Ctx
 emptyCtx = Ctx empty empty [] empty empty
 
 emptyConstr :: Constr
-emptyConstr = Constr emptyCtx [] []
+emptyConstr = Constr emptyCtx [] [] False
 
 instance Show Prim where
   show :: Prim -> String
@@ -88,7 +89,7 @@ instance Show Ty where
 
 instance Show Constr where
   show :: Constr -> String
-  show (Constr _ ts bs) = "Tops: "
+  show (Constr _ ts bs _) = "Tops: "
     ++ intercalate ", " (map show ts)
     ++ "\n"
     ++ " Bots: "

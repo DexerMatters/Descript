@@ -15,8 +15,10 @@ type ConstrState = EvalState Tm.Constr Border
 type FITy = FI Ty
 
 data TCtx = TCtx { border :: [ConstrState], types :: [Ty] }
+  deriving (Show)
 
 data Closure = Closure { env :: TCtx, body :: FI T.Ty }
+  deriving (Show)
 
 data Ty = TyVar Int
         | TyPrim Prim
@@ -24,6 +26,7 @@ data Ty = TyVar Int
         | TyTuple [FITy]
         | TyRcd [(Name, FITy)]
         | TyLam Int Closure
+        | TySum [FITy]
         | TyTop
         | TyBot
 
@@ -37,5 +40,6 @@ instance Show Ty where
     "{" ++ intercalate ", " (map (\(l, t) -> l ++ ": " ++ show t) tys) ++ "}"
   show (TyLam i (Closure _ tms)) =
     "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ show tms ++ ">"
+  show (TySum tys) = intercalate "∩" (map show tys)
   show TyTop = "Top"
   show TyBot = "Bot"
