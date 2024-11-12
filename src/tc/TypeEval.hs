@@ -45,6 +45,7 @@ eval = \case
     let aux = \case
           _ :| V.TyArrow args' ty -> do
             zipWithM_ cast args args'
+            printM $ "ArgTypes: " ++ show [args, args']
             return ty
           _ :| V.TyLam i cls -> do
             argTypes <- folkEnv
@@ -134,6 +135,11 @@ bicast a b = (,) <$> a <: b <*> b <: a
     p :| ty :*>: V.TyLam i cls -> do
       ret <- reduce cls i
       FI p ty <: ret
+    -- Union and sum types
+    V.TyUnion t1 t2 :<*: t -> (&&) <$> t1 <: t <*> t2 <: t
+    t :*>: V.TyUnion t1 t2 -> (||) <$> t <: t1 <*> t <: t2
+    V.TySum t1 t2 :<*: t -> (||) <$> t1 <: t <*> t2 <: t
+    t :*>: V.TySum t1 t2 -> (&&) <$> t <: t1 <*> t <: t2
     _ -> return False
 
 -- | Introduce the type variables to the context
@@ -166,30 +172,30 @@ evalBorder (p :| i) = do
   return (fromInterpreted res)
   where
     -- | Shrink the constraints to the smallest possible border
-    norm c@(T.Constr _ tops bots _) = do
+    norm (T.Constr _ tops bots _) = do
       -- env0 <- get
       -- TODO: Switch to the environment of the constraint
       --       and evaluate the tops and bots, but environment
       --       should be evaluated (to be a TCtx)
       tops' <- mapM eval (FI p <$> tops)
       bots' <- mapM eval (FI p <$> bots)
-      top <- foldM (botmost c) (p :| V.TyBot) tops'
-      bot <- foldM (topmost c) (p :| V.TyTop) bots'
+      top <- foldM botmost (p :| V.TyBot) tops'
+      bot <- foldM topmost (p :| V.TyTop) bots'
       return (top, bot)
 
     -- | Compute the topmost type of two types
-    topmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
+    topmost lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
       >>= \case
         (True, _)      -> return lhs
         (False, True)  -> return rhs
-        (False, False) -> throwError $ BadConstraint $ p :| c
+        (False, False) -> return $ p :| V.TySum lhs rhs
 
     -- | Compute the botmost type of two types
-    botmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
+    botmost lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
       >>= \case
         (_, True)      -> return lhs
         (True, False)  -> return rhs
-        (False, False) -> throwError $ BadConstraint $ p :| c
+        (False, False) -> return $ p :| V.TyUnion lhs rhs
 evalBorder _ = error "impossible"
 
 inferTypeArgs :: V.FITy -> V.FITy --> [V.Ty]

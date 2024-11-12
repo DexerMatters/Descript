@@ -26,7 +26,8 @@ data Ty = TyVar Int
         | TyTuple [FITy]
         | TyRcd [(Name, FITy)]
         | TyLam Int Closure
-        | TySum [FITy]
+        | TySum FITy FITy
+        | TyUnion FITy FITy
         | TyTop
         | TyBot
 
@@ -40,6 +41,7 @@ instance Show Ty where
     "{" ++ intercalate ", " (map (\(l, t) -> l ++ ": " ++ show t) tys) ++ "}"
   show (TyLam i (Closure _ tms)) =
     "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ show tms ++ ">"
-  show (TySum tys) = intercalate "∩" (map show tys)
+  show (TySum t1 t2) = show t1 ++ "∩" ++ show t2
+  show (TyUnion t1 t2) = show t1 ++ "∪" ++ show t2
   show TyTop = "Top"
   show TyBot = "Bot"
