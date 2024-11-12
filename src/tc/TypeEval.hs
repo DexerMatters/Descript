@@ -12,7 +12,7 @@ import qualified Tm as T
 import           State
 import           Utils
 import           Control.Monad.State (gets, modify, MonadState(get, put))
-import           Control.Monad (foldM, zipWithM, zipWithM_)
+import           Control.Monad (foldM, zipWithM, zipWithM_, unless)
 import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           GHC.Base (join)
@@ -86,6 +86,7 @@ bicast a b = (,) <$> a <: b <*> b <: a
 -- | Compare two types. Check if rhs is a subtype of lhs,
 --   which is to say lhs is more general than rhs.
 (<:) :: V.FITy -> V.FITy --> Bool
+-- *more specific* <: *more general*
 (<:) = curry
   $ \case
     --  Top is a supertype of all types
@@ -95,20 +96,21 @@ bicast a b = (,) <$> a <: b <*> b <: a
     -- Different primitive types do not differ in generality
     V.TyPrim p1 :<*>: V.TyPrim p2 -> return $ p1 == p2
     p :| V.TyVar i :*: p' :| V.TyVar j -> do
-      (top, bot) <- evalBorder (p :| i)
-      (top', bot') <- evalBorder (p' :| j)
-      b <- top' <: top
-      b' <- bot <: bot'
+      (bot, top) <- evalBorder (p :| i) -- smaller
+      (bot', top') <- evalBorder (p' :| j)
+      b <- top <: top'
+      b' <- bot' <: bot
       return $ b && b'
     p :| V.TyVar i :*: ty -> do
-      (top, bot) <- evalBorder (p :| i)
-      b <- top <: ty
-      b' <- bot <: ty
+      (bot, top) <- evalBorder (p :| i)
+      printM $ show (bot, top)
+      b <- bot <: ty
+      b' <- ty <: top
       return $ b && b'
     ty :*: p :| V.TyVar i -> do
-      (top, bot) <- evalBorder (p :| i)
-      b <- ty <: bot
-      b' <- top <: ty
+      (bot, top) <- evalBorder (p :| i)
+      b <- ty <: top
+      b' <- bot <: ty
       return $ b && b'
     V.TyTuple tys :<*>: V.TyTuple tys' -> and <$> zipWithM (<:) tys tys'
     -- Record A is a subtype of record B only if
@@ -136,9 +138,9 @@ bicast a b = (,) <$> a <: b <*> b <: a
       ret <- reduce cls i
       FI p ty <: ret
     -- Union and sum types
-    V.TyUnion t1 t2 :<*: t -> (&&) <$> t1 <: t <*> t2 <: t
+    V.TyUnion t1 t2 :<*: t -> (||) <$> t1 <: t <*> t2 <: t
     t :*>: V.TyUnion t1 t2 -> (||) <$> t <: t1 <*> t <: t2
-    V.TySum t1 t2 :<*: t -> (||) <$> t1 <: t <*> t2 <: t
+    V.TySum t1 t2 :<*: t -> (&&) <$> t1 <: t <*> t2 <: t
     t :*>: V.TySum t1 t2 -> (&&) <$> t <: t1 <*> t <: t2
     _ -> return False
 
@@ -179,18 +181,22 @@ evalBorder (p :| i) = do
       --       should be evaluated (to be a TCtx)
       tops' <- mapM eval (FI p <$> tops)
       bots' <- mapM eval (FI p <$> bots)
-      top <- foldM botmost (p :| V.TyBot) tops'
-      bot <- foldM topmost (p :| V.TyTop) bots'
-      return (top, bot)
+      top <- if null tops'
+             then return $ p :| V.TyTop
+             else foldM botmost (p :| V.TyBot) tops'
+      bot <- if null bots'
+             then return $ p :| V.TyBot
+             else foldM topmost (p :| V.TyTop) bots'
+      return (bot, top)
 
-    -- | Compute the topmost type of two types
+    -- | Compute the more specific type of two types
     topmost lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
       >>= \case
         (True, _)      -> return lhs
         (False, True)  -> return rhs
         (False, False) -> return $ p :| V.TySum lhs rhs
 
-    -- | Compute the botmost type of two types
+    -- | Compute the more general type of two types
     botmost lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
       >>= \case
         (_, True)      -> return lhs
@@ -202,12 +208,15 @@ inferTypeArgs :: V.FITy -> V.FITy --> [V.Ty]
 inferTypeArgs = curry
   $ \case
     -- {To be match} :<*>: {Input}
-    p :| V.TyVar i :*: p' :| ty -> do
-      (top, bot) <- evalBorder (p :| i)
-      ts <- inferTypeArgs top (p' :| ty)
-      bs <- inferTypeArgs bot (p' :| ty)
-      printM $ show ty ++ "," ++ show bot
-      return $ ty:ts ++ bs
+    p :| V.TyVar i :*: ty -> do
+      (bot, top) <- evalBorder (p :| i)
+      b <- bot <: ty
+      b' <- ty <: top
+      printM $ "inferTypeArgs: " ++ show [ty, bot, top]
+      unless (b && b') $ throwError $ BadParameterType ty (bot, top)
+      ts <- inferTypeArgs top ty
+      bs <- inferTypeArgs bot ty
+      return $ val ty:ts ++ bs
     V.TyTuple tys
       :<*>: V.TyTuple tys' -> join <$> zipWithM inferTypeArgs tys tys'
     V.TyRcd flds :<*>: V.TyRcd flds'

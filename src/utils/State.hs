@@ -124,5 +124,6 @@ data TEError = BadCast V.FITy V.FITy
              | Unimplemented (FI String)
              | BadConstraint (FI T.Constr)
              | NonDeducibleArgumentType V.FITy
+             | BadParameterType V.FITy V.Border
              | DissatisfiedTypeParameterCount (FI Int)
   deriving (Show)

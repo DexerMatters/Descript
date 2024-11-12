@@ -1,8 +1,6 @@
 (
   (b) => {
-    if (b)
-      b as Number
-    else
-      b as Number
+    b as Number;
+    b as Bool;
   }
-)(12)
+)(true)
