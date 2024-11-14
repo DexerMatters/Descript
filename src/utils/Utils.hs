@@ -3,6 +3,8 @@
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
+{-# LANGUAGE TupleSections #-}
+
 module Utils
     ( FI(..)
     , EvalState(..)
@@ -15,6 +17,12 @@ module Utils
     , fromBool
     , allT
     , anyT
+    , insert
+    , insert'
+    , updateAt
+    , lookup
+    , lookupIndex
+    , elems
     , (&&&)
     , (|||)
     , type (|->)
@@ -26,7 +34,7 @@ module Utils
     , includeByM
     , trEq) where
 
-import           Data.Map (Map)
+import           Prelude hiding (lookup)
 
 data EvalState a b = Uninterpreted a
                    | Interpreted b
@@ -70,7 +78,37 @@ pattern (:*>:) a b <- a :*: FI _ b
 
 infixr 6 :*:, :<*:, :<*>:, :*>:
 
-type (|->) = Map
+type a |->  b = [(a, b)]
+
+insert :: a -> b -> a |-> b -> a |-> b
+insert a b = ((a, b):)
+
+insert' :: a -> b -> a |-> b -> a |-> b
+insert' a b = (++ [(a, b)])
+
+updateAt :: (k -> a -> Maybe a) -> Int -> k |-> a -> k |-> a
+updateAt f = aux
+  where
+    aux _ [] = []
+    aux 0 ((k, v):xs') = case f k v of
+      Just v' -> (k, v'):xs'
+      Nothing -> xs'
+    aux j (x:xs') = x:aux (j - 1) xs'
+
+lookup :: Eq a => a -> a |-> b -> Maybe b
+lookup _ [] = Nothing
+lookup a ((a', b):xs) = if a == a'
+                        then Just b
+                        else a `lookup` xs
+
+lookupIndex :: Eq a => a -> a |-> b -> Maybe Int
+lookupIndex _ [] = Nothing
+lookupIndex a ((a', _):xs) = if a == a'
+                             then Just 0
+                             else (1 +) <$> lookupIndex a xs
+
+elems :: k |-> a -> [a]
+elems = map snd
 
 -- | Convert a Tril to a Bool
 toBool :: Tril -> Bool

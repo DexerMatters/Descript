@@ -21,6 +21,7 @@ import           Tm as T (Ctx(tvars), FITy
                         , emptyConstr)
 import           Utils
 import           Dbg (traceInfo, printM)
+import           Prelude hiding (lookup)
 
 infer :: R.FITm ->> T.FITy
 infer = \case
@@ -59,12 +60,14 @@ infer = \case
     case lamTy of
       _ :| T.TyArrow tys _ -> do
         zipWithM_ unify tys argTys
-        return $ p :| T.TyReduce lamTy argTys
+        return $ p :| T.TyReduce [] lamTy argTys
       _ :| T.TyLam _ (_ :| T.TyArrow tys _) -> do
         zipWithM_ unify tys argTys
-        return $ p :| T.TyReduce lamTy argTys
+        cs <- gets tvars
+        printM $ "CONSTRS:" ++ show cs
+        return $ p :| T.TyReduce tys lamTy argTys
       -- Neutrals
-      _ -> return $ p :| T.TyReduce lamTy argTys
+      _ -> return $ p :| T.TyReduce [] lamTy argTys
   p :| R.Proj tar l -> do
     tarTy <- infer tar
     case tarTy of

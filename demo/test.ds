@@ -1,8 +1,6 @@
 (
   (b) => {
-    if (b.bool)
-      b.ifTrue
-    else
-      b.ifFalse
+    b.one as Bool;
+    b.two as Number
   }
-)({ bool = 12, ifTrue = "fuck", ifFalse = "shit" })
+)({one = true, two = 12})

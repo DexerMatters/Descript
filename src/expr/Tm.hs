@@ -25,7 +25,7 @@ data Ty   -- Explicit types
   | TyLam Int FITy
   | TyCast FITy FITy
   | TyBiCast FITy FITy
-  | TyReduce FITy [FITy]
+  | TyReduce [FITy] FITy [FITy]
   | TyMacro String FITy
 
 data Prim = PrimNum
@@ -44,7 +44,8 @@ data Pttrn = PttrnAtom String
 
 type Label = String
 
-data Constr = Constr { env :: Ctx, tops :: [Ty], bots :: [Ty], locked :: Bool }
+data Constr = Constr { tops :: [Ty], bots :: [Ty], locked :: Bool }
+  deriving (Show)
 
 data Ctx = Ctx { vars :: Name |-> Ty
                , tvars :: Name |-> Constr
@@ -55,10 +56,10 @@ data Ctx = Ctx { vars :: Name |-> Ty
   deriving (Show)
 
 emptyCtx :: Ctx
-emptyCtx = Ctx empty empty [] empty empty
+emptyCtx = Ctx [] [] [] [] []
 
 emptyConstr :: Constr
-emptyConstr = Constr emptyCtx [] [] False
+emptyConstr = Constr [] [] False
 
 instance Show Prim where
   show :: Prim -> String
@@ -81,16 +82,9 @@ instance Show Ty where
   show (TyApp ty tys) =
     show ty ++ "<" ++ intercalate ", " (map show tys) ++ ">"
   show (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ show ty
-  show (TyReduce ty tys) =
+  show (TyReduce _ ty tys) =
     show ty ++ "[" ++ intercalate ", " (map show tys) ++ "]"
   show (TyMacro s ty) = s ++ "!(" ++ show ty ++ ")"
   show (TyCast ty1 ty2) = show ty1 ++ " !=> " ++ show ty2
   show (TyBiCast ty1 ty2) = show ty1 ++ " <=> " ++ show ty2
 
-instance Show Constr where
-  show :: Constr -> String
-  show (Constr _ ts bs _) = "Tops: "
-    ++ intercalate ", " (map show ts)
-    ++ "\n"
-    ++ " Bots: "
-    ++ intercalate ", " (map show bs)

@@ -14,11 +14,11 @@ import           Control.Monad (zipWithM)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           Control.Monad.State.Lazy (get)
 import           Data.Functor (($>))
-import qualified Data.Map as M
 import           Raw as R
 import           State
 import           Tm as T
 import           Utils
+import           Prelude hiding (lookup)
 
 inferPattern :: FI R.Pttrn ->> FI T.Ty
 inferPattern = \case
@@ -40,9 +40,9 @@ indexType :: FI R.Ty ->> FI T.Ty
 indexType = \case
   p :| R.TyVar x -> do
     Ctx { tvars, globalTypes } <- get
-    case x `M.lookupIndex` tvars of
+    case x `lookupIndex` tvars of
       Just i  -> pure $ p :| T.TyVar i
-      Nothing -> case x `M.lookup` globalTypes of
+      Nothing -> case x `lookup` globalTypes of
         Just ty -> pure $ p :| ty
         Nothing -> throwError $ UnboundType $ p :| x
   p :| R.TyPrim prim -> pure $ p :| T.TyPrim prim

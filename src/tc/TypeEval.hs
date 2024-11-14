@@ -12,17 +12,19 @@ import qualified Tm as T
 import           State
 import           Utils
 import           Control.Monad.State (gets, modify, MonadState(get, put))
-import           Control.Monad (foldM, zipWithM, zipWithM_)
+import           Control.Monad (foldM, zipWithM, zipWithM_, unless)
 import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           GHC.Base (join)
-import           Dbg (traceInfo, printInfo, printM)
+import           Dbg (printM)
 
 eval :: T.FITy --> V.FITy
 eval = \case
   p :| T.TyVar i -> do
     env <- gets V.types
-    return $ p :| env !! i
+    if i < length env
+      then return $ p :| env !! i
+      else return $ p :| V.TyVar i
   p :| T.TyPrim prim -> return $ p :| V.TyPrim prim
   p :| T.TyArrow tys ty -> do
     tys' <- mapM eval tys
@@ -39,22 +41,20 @@ eval = \case
     return $ p :| V.TyLam i (V.Closure env cls)
   _ :| T.TyCast a b -> join $ cast <$> eval a <*> eval b
   _ :| T.TyBiCast a b -> join $ bicast <$> eval a <*> eval b
-  _ :| T.TyReduce f as -> do
+  _ :| T.TyReduce tarArg f as -> do
     func <- eval f
     args <- mapM eval as
+    tarArgs <- mapM eval tarArg
+    printM $ "ArgTypes: " ++ show tarArgs
     let aux = \case
           _ :| V.TyArrow args' ty -> do
             zipWithM_ cast args args'
             return ty
           _ :| V.TyLam i cls -> do
-            argTypes <- folkEnv
-              $ do
-                ret <- reduce cls i
-                case ret of
-                  _ :| V.TyArrow args' _
-                    -> join <$> zipWithM inferTypeArgs args' args
-                  _ -> throwError $ NotAFunctionType func
-            printM $ "ArgTypes: " ++ show argTypes
+            argTypes <- join <$> zipWithM inferTypeArgs tarArgs args
+            unless (length argTypes == i)
+              $ throwError
+              $ DissatisfiedTypeParameterCount (FI (pos f) i)
             aux =<< folkEnv (apply cls argTypes)
           _ -> throwError $ NotAFunctionType func
     aux func
@@ -101,7 +101,8 @@ bicast a b = (,) <$> a <: b <*> b <: a
       return $ b && b'
     p :| V.TyVar i :*: ty -> do
       (top, bot) <- evalBorder (p :| i)
-      b <- top <: ty
+      printM $ show ty ++ "," ++ show top ++ "," ++ show bot
+      b <- ty <: top
       b' <- bot <: ty
       return $ b && b'
     ty :*: p :| V.TyVar i -> do
@@ -134,7 +135,63 @@ bicast a b = (,) <$> a <: b <*> b <: a
     p :| ty :*>: V.TyLam i cls -> do
       ret <- reduce cls i
       FI p ty <: ret
+    V.TyUnion a b :<*: ty -> (||) <$> (a <: ty) <*> (b <: ty)
+    ty :*>: V.TyUnion a b -> (&&) <$> (ty <: a) <*> (ty <: b)
+    V.TySum a b :<*: ty -> (&&) <$> (a <: ty) <*> (b <: ty)
+    ty :*>: V.TySum a b -> (||) <$> (ty <: a) <*> (ty <: b)
     _ -> return False
+
+getLowerType :: V.FITy -> V.FITy --> V.FITy
+getLowerType t1 t2 = case t1 :*: t2 of
+  V.TyTop :<*>: _ -> return t2
+  _ :<*>: V.TyTop -> return t1
+  V.TyBot :<*>: _ -> return t1
+  _ :<*>: V.TyBot -> return t2
+  V.TyRcd flds :<*>: V.TyRcd flds' -> do
+    newFlds <- sequence
+      [(l, ) <$> getLowerType t t'
+      | (l, t) <- flds
+      , (l', t') <- flds'
+      , l == l']
+    return $ pos t1 :| V.TyRcd newFlds
+  V.TyTuple tys :<*>: V.TyTuple tys'
+    | length tys == length tys' -> FI (pos t1) . V.TyTuple
+      <$> zipWithM getLowerType tys tys'
+  V.TyArrow tys ty :<*>: V.TyArrow tys' ty'
+    | length tys == length tys' -> do
+      tys'' <- zipWithM getUpperType tys tys'
+      ty'' <- getLowerType ty ty'
+      return $ pos t1 :| V.TyArrow tys'' ty''
+  other :*: another -> return $ pos t1 :| V.TyUnion other another
+  _ -> error "impossible"
+
+getUpperType :: V.FITy -> V.FITy --> V.FITy
+getUpperType t1 t2 = case t1 :*: t2 of
+  V.TyTop :<*>: _ -> return t1
+  _ :<*>: V.TyTop -> return t2
+  V.TyBot :<*>: _ -> return t2
+  _ :<*>: V.TyBot -> return t1
+  V.TyPrim p :<*>: V.TyPrim p'
+    | p == p' -> return t1
+  V.TyRcd flds :<*>: V.TyRcd flds' -> do
+    newFlds <- sequence
+      $ do
+        (l, t) <- flds
+        (l', t') <- flds'
+        if l == l'
+          then [(l, ) <$> getUpperType t t']
+          else [pure (l, t), pure (l', t')]
+    return $ pos t1 :| V.TyRcd newFlds
+  V.TyTuple tys :<*>: V.TyTuple tys'
+    | length tys == length tys' -> FI (pos t1) . V.TyTuple
+      <$> zipWithM getUpperType tys tys'
+  V.TyArrow tys ty :<*>: V.TyArrow tys' ty'
+    | length tys == length tys' -> do
+      tys'' <- zipWithM getLowerType tys tys'
+      ty'' <- getUpperType ty ty'
+      return $ pos t1 :| V.TyArrow tys'' ty''
+  other :*: another -> return $ pos t1 :| V.TySum other another
+  _ -> error "impossible"
 
 -- | Introduce the type variables to the context
 extendCtx :: V.Closure -> Int -> [V.Ty]
@@ -166,42 +223,30 @@ evalBorder (p :| i) = do
   return (fromInterpreted res)
   where
     -- | Shrink the constraints to the smallest possible border
-    norm c@(T.Constr _ tops bots _) = do
+    norm (T.Constr tops bots _) = do
       -- env0 <- get
       -- TODO: Switch to the environment of the constraint
       --       and evaluate the tops and bots, but environment
       --       should be evaluated (to be a TCtx)
       tops' <- mapM eval (FI p <$> tops)
       bots' <- mapM eval (FI p <$> bots)
-      top <- foldM (botmost c) (p :| V.TyBot) tops'
-      bot <- foldM (topmost c) (p :| V.TyTop) bots'
+      top <- foldM getLowerType (p :| V.TyTop) tops'
+      bot <- foldM getUpperType (p :| V.TyBot) bots'
       return (top, bot)
-
-    -- | Compute the topmost type of two types
-    topmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
-      >>= \case
-        (True, _)      -> return lhs
-        (False, True)  -> return rhs
-        (False, False) -> throwError $ BadConstraint $ p :| c
-
-    -- | Compute the botmost type of two types
-    botmost c lhs rhs = (,) <$> lhs <: rhs <*> rhs <: lhs
-      >>= \case
-        (_, True)      -> return lhs
-        (True, False)  -> return rhs
-        (False, False) -> throwError $ BadConstraint $ p :| c
 evalBorder _ = error "impossible"
 
 inferTypeArgs :: V.FITy -> V.FITy --> [V.Ty]
 inferTypeArgs = curry
   $ \case
     -- {To be match} :<*>: {Input}
-    p :| V.TyVar i :*: p' :| ty -> do
+    p :| V.TyVar i :*: ty -> do
       (top, bot) <- evalBorder (p :| i)
-      ts <- inferTypeArgs top (p' :| ty)
-      bs <- inferTypeArgs bot (p' :| ty)
-      printM $ show ty ++ "," ++ show bot
-      return $ ty:ts ++ bs
+      ts <- inferTypeArgs top ty
+      bs <- inferTypeArgs bot ty
+      b <- (&&) <$> (ty <: top) <*> (bot <: ty)
+      printM $ show ty ++ ",bot: " ++ show bot ++ ",top: " ++ show top
+      unless b $ throwError $ BadMatchedBorder ty top bot
+      return $ val ty:ts ++ bs
     V.TyTuple tys
       :<*>: V.TyTuple tys' -> join <$> zipWithM inferTypeArgs tys tys'
     V.TyRcd flds :<*>: V.TyRcd flds'

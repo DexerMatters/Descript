@@ -9,12 +9,12 @@ import           Control.Monad.Except (ExceptT, MonadError(throwError)
                                      , runExceptT)
 import           Control.Monad.State (MonadState(get, put), State, modify, gets
                                     , runState, evalState, StateT(runStateT))
-import           Data.Map (lookup, insert, updateAt, elems)
 import           Raw as R
 import           Tm as T
 import           Utils
 import           Val as V
 import           Prelude hiding (lookup)
+import           Dbg (printM)
 
 --------------------------------------------------------------------------------
 -- States
@@ -64,13 +64,15 @@ newVar x ty = do
 newTVar :: R.Name -> T.Constr ->> T.Ty
 newTVar x k = do
   ctx <- get
-  let tvars' = insert x k (tvars ctx)
+  let tvars' = insert' x k (tvars ctx)
   put ctx { tvars = tvars' }
   return . T.TyVar . length $ tvars ctx
 
 addBot :: Int -> T.Ty ->> ()
 addBot i bot = do
   tvars' <- gets tvars
+  printM $ "Adding bot: " ++ show bot ++ " to " ++ show i
+  printM $ "Current tvars: " ++ show tvars'
   let f _ constr = Just
         $ if locked constr
           then constr
@@ -96,8 +98,8 @@ lockConstr i = do
   modify $ \ctx -> ctx { tvars = updated }
 
 ctx2TCtx :: Ctx -> TCtx
-ctx2TCtx Ctx { tvars } =
-  TCtx { border = Uninterpreted <$> elems tvars, types = [] }
+ctx2TCtx Ctx { tvars, T.rcdSyms = rs } =
+  TCtx { border = Uninterpreted <$> elems tvars, types = [], V.rcdSyms = rs }
 
 folkEnv :: PartialState e s a -> PartialState e s a
 folkEnv m = do
@@ -121,6 +123,7 @@ data TCError = UnboundVar (FI R.Name)
 data TEError = BadCast V.FITy V.FITy
              | NotAFunctionType V.FITy
              | NotATypeFunctionType V.FITy
+             | BadMatchedBorder V.FITy V.FITy V.FITy
              | Unimplemented (FI String)
              | BadConstraint (FI T.Constr)
              | NonDeducibleArgumentType V.FITy
