@@ -10,7 +10,7 @@
 #
 # snapshot: lts-22.28
 # snapshot: nightly-2024-07-05
-snapshot: ghc-9.6.5
+snapshot: ghc-9.2.8
 #
 # The location of a snapshot can be provided as a file or url. Stack assumes
 # a snapshot provided as a file might change, whereas a url resource does not.
@@ -34,17 +34,35 @@ packages:
 # forks / in-progress versions pinned to a git hash. For example:
 #
 extra-deps:
-  - megaparsec-9.6.1
+  - megaparsec-9.5.0
   - mtl-2.3.1
   - containers-0.6.7
-  - case-insensitive-1.2.1.0@sha256:9dfd3171fc7698cf8d931727d3af3a7b389135b583e46b5adac1f9d2026fff61,2244
-  - parser-combinators-1.3.0@sha256:8659573e0d443d573f5b53f81b81dafbdc988d282b90c11e3da73562b4ea7876,1640
-  - scientific-0.3.8.0@sha256:2148e2e6ab1f1fd2ecee25067e0ee60da886be89736e8a54d49556407d7113ce,4380
-  - hashable-1.5.0.0@sha256:fc68b07d957ade5a0a0beadd560a8d093ceac30b2f35c85eed3bcf7889a25975,5833
-  - integer-logarithms-1.0.3.1@sha256:0595a16d458c9c5caa425dc8ebbeb5d9adffb0c8daf4720c1d93dfcfc31dd690,3295
-  - primitive-0.9.0.0@sha256:2e08c5409e3559c7f1669ef50e9a0d9a397e68ecf51110d5e2cedf05cdd7d93c,3171
-  - os-string-2.0.6@sha256:7699e7ae9bf74d056a62f384ceef8dfb2aa660f3f7c8016e9703f3b995e5e030,3259
+  - vector-0.13.2.0
+  - case-insensitive-1.2.1.0
+  - scientific-0.3.8.0
+  - text-2.1.2
+  - binary-0.8.9.2
+  - hashable-1.4.7.0
 
+  - random-1.2.1.2
+  - tasty-1.5.2
+  - vector-stream-0.1.0.1
+  - ansi-terminal-1.1.2
+  - optparse-applicative-0.18.1.0
+  - splitmix-0.1.0.5
+  - tagged-0.8.8
+  - ansi-terminal-types-1.1
+  - colour-2.3.6
+  - prettyprinter-1.7.1
+  - prettyprinter-ansi-terminal-1.1.3
+  - transformers-compat-0.7.2
+
+  - exceptions-0.10.9
+  - os-string-2.0.6
+  - primitive-0.9.0.0
+  - data-array-byte-0.1.0.1
+  - integer-logarithms-1.0.3.1
+  - parser-combinators-1.3.0
 # Override default flag values for project packages and extra-deps
 # flags: {}
 
@@ -52,7 +70,7 @@ extra-deps:
 # extra-package-dbs: []
 
 # Control whether we use the GHC we find on the path
-system-ghc: true
+# system-ghc: true
 #
 # Require a specific version of Stack, using version ranges
 # require-stack-version: -any # Default

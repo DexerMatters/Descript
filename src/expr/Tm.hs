@@ -7,26 +7,24 @@
 module Tm where
 
 import           Data.List (intercalate)
+import           Data.Sequence
 import           Utils
-import           Data.Map (empty)
 
-type FITy = FI Ty
-
-type Name = String
+data Ctx = Ctx { vars :: Name |-> Ty, constrs :: Seq Constr }
+  deriving (Show)
 
 data Ty   -- Explicit types
   = TyVar Int
   | TyPrim Prim
-  | TyArrow [FITy] FITy
-  | TyTuple [FITy]
-  | TyRcd [(Label, FITy)]
-  | TyApp FITy [FITy]
+  | TyArrow [Ty] Ty
+  | TyTuple [Ty]
+  | TyRcd [(Label, Ty)]
+  | TyApp Ty [Ty] [Ty]
     -- Generated types
-  | TyLam Int FITy
-  | TyCast FITy FITy
-  | TyBiCast FITy FITy
-  | TyReduce [FITy] FITy [FITy]
-  | TyMacro String FITy
+  | TyLam Int Ty
+  | TyCast Ty Ty
+  | TyBiCast Ty Ty
+  | TyMacro String Ty
 
 data Prim = PrimNum
           | PrimBool
@@ -36,30 +34,14 @@ data Prim = PrimNum
   deriving (Eq)
 
 data Pttrn = PttrnAtom String
-           | PttrnAnn Pttrn FITy
+           | PttrnAnn Pttrn Ty
            | PttrnTuple [Pttrn]
   deriving (Show)
 
 -- Other types
 
-type Label = String
-
-data Constr = Constr { tops :: [Ty], bots :: [Ty], locked :: Bool }
+data Constr = Constr { elems :: [Constraint Ty], locked :: Bool }
   deriving (Show)
-
-data Ctx = Ctx { vars :: Name |-> Ty
-               , tvars :: Name |-> Constr
-               , rcdSyms :: [Name]
-               , globalTypes :: Name |-> Ty
-               , globalVars :: Name |-> Ty
-               }
-  deriving (Show)
-
-emptyCtx :: Ctx
-emptyCtx = Ctx [] [] [] [] []
-
-emptyConstr :: Constr
-emptyConstr = Constr [] [] False
 
 instance Show Prim where
   show :: Prim -> String
@@ -79,12 +61,17 @@ instance Show Ty where
   show (TyRcd rcd) = "Record{"
     ++ unwords (map (\(l, t) -> l ++ ": " ++ show t ++ "; ") rcd)
     ++ "}"
-  show (TyApp ty tys) =
+  show (TyApp ty _ tys) =
     show ty ++ "<" ++ intercalate ", " (map show tys) ++ ">"
   show (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ show ty
-  show (TyReduce _ ty tys) =
-    show ty ++ "[" ++ intercalate ", " (map show tys) ++ "]"
   show (TyMacro s ty) = s ++ "!(" ++ show ty ++ ")"
   show (TyCast ty1 ty2) = show ty1 ++ " !=> " ++ show ty2
   show (TyBiCast ty1 ty2) = show ty1 ++ " <=> " ++ show ty2
 
+data TError = UnboundVar Name
+            | UnboundType Name
+            | MissingLabel Name
+            | BadPattern Pttrn Ty
+            | NonProjectableType Ty
+            | DissatisfiedParameterCount Int
+  deriving (Show)

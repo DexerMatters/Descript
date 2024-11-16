@@ -39,6 +39,7 @@ library:
     - megaparsec
     - mtl
     - containers
+    - vector
 
 executables:
   descript-exe:

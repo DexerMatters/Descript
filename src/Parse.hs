@@ -16,7 +16,6 @@ import           Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar
 import qualified Text.Megaparsec.Char.Lexer as L
 import           Text.Megaparsec.Debug (MonadParsecDbg(dbg))
 import           Tm (Prim(..))
-import           Utils (FI(FI))
 
 preserved :: [String]
 preserved = [ "let"
@@ -71,18 +70,6 @@ bracket = between (symbol "[") (symbol "]")
 brace :: Parser a -> Parser a
 brace = between (symbol "{") (symbol "}")
 
-withFI :: Parser a -> Parser (FI a)
-withFI p = do
-  start <- L.getOffset
-  tm <- p
-  end <- L.getOffset
-  return $ FI (start, end) tm
-
-withoutFI :: Parser (FI a) -> Parser a
-withoutFI p = do
-  FI _ tm <- p
-  return tm
-
 -------------
 -- Definition Parsing
 -------------
@@ -90,8 +77,8 @@ withoutFI p = do
 parseProg :: Parser Prog
 parseProg = Prog <$> many parseDef
 
-parseDef :: Parser (FI Def)
-parseDef = choice (withFI <$> [pValDef, pTyLet, pFuncDef, pEnumDef])
+parseDef :: Parser Def
+parseDef = choice [pValDef, pTyLet, pFuncDef, pEnumDef]
 
 pValDef :: Parser Def
 pValDef = ValDef <$> (symbol "let" *> lexeme camelCase)
@@ -119,16 +106,15 @@ pEnumDef = EnumDef <$> (symbol "enum" *> lexeme pascalCase)
 -- -------------
 -- Term Parsing
 -- -------------
-type FITm = FI Tm
 
 d :: (Show a) => Parser a -> Parser a
 d = dbg "Parsing::\n"
 
-parseTm :: Int -> Parser FITm
+parseTm :: Int -> Parser Tm
 parseTm p = choice l
   where
     l = drop p
-      $ try . withFI
+      $ try
       <$> [ pLet
           , pApp
           , pLam
@@ -144,7 +130,7 @@ parseTm p = choice l
           , pParen]
 
 pParen :: Parser Tm
-pParen = (symbol "(" <* notFollowedBy (symbol ")")) *> (withoutFI . parseTm) 0
+pParen = (symbol "(" <* notFollowedBy (symbol ")")) *> parseTm 0
   <* symbol ")"
   <* notFollowedBy (symbol "=>")
 
@@ -205,11 +191,9 @@ pMacro = Macro <$> lexeme camelCase
 -- -------------
 -- Pattern Parsing
 -- -------------
-type FIPttrn = FI Pttrn
 
-parsePttrn :: Int -> Parser FIPttrn
-parsePttrn
-  p = choice $ drop p $ try . withFI <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
+parsePttrn :: Int -> Parser Pttrn
+parsePttrn p = choice $ drop p $ try <$> [pPttrnAnn, pPttrnTuple, pPttrnAtom]
 
 pPttrnAtom :: Parser Pttrn
 pPttrnAtom = PttrnAtom <$> lexeme camelCase
@@ -222,13 +206,11 @@ pPttrnAnn = PttrnAnn <$> parsePttrn 1 <*> (symbol ":" *> parseTy 0)
 
 -- -------------
 -- Type Parsing
--- -------------
-type FITy = FI Ty
 
-parseTy :: Int -> Parser FITy
+parseTy :: Int -> Parser Ty
 parseTy p = choice
   $ drop p
-  $ try . withFI <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
+  $ try <$> [pTyArrow, pTyApp, pTyTuple, pTyRcd, pTyPrim, pTyVar]
 
 pTyVar :: Parser Ty
 pTyVar = TyVar <$> lexeme pascalCase

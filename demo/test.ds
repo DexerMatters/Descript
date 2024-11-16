@@ -1,6 +1,5 @@
 (
-  (b) => {
-    b.one as Bool;
-    b.two as Number
+  (a) => {
+    (a.one).two as Number
   }
-)({one = true, two = 12})
+)({one = {three = 23, two = 12}, fuck = 5})

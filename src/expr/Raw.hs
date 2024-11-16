@@ -3,46 +3,44 @@
 module Raw where
 
 import           Tm (Prim)
-import           Utils (FI)
 
 -- Syntax
-newtype Prog = Prog [FI Def]
+newtype Prog = Prog [Def]
   deriving (Show)
 
-type EnumField = (String, [FITy])
+type EnumField = (String, [Ty])
 
-data Def = FuncDef Name [FI Pttrn] (Maybe (FI Ty)) (FI Tm)
-         | ValDef Name (FI Tm)
-         | TyLet Name (FI Ty)
+data Def = FuncDef Name [Pttrn] (Maybe Ty) Tm
+         | ValDef Name Tm
+         | TyLet Name Ty
          | EnumDef Name [String {- Type Variables -}] [EnumField]
   deriving (Show)
 
-data Tm =
-    Var Name
-  | Lit Lit
-  | Lam [FI Pttrn {- Arguments -}] (Maybe FITy {- Return -}) FITm {- Body -}
-  | App FITm [FITm]
-  | Let (FI Pttrn) FITm FITm
-  | Cond FITm {- Pred -} FITm {- Then -} FITm {- Else -}
-  | Tuple [FITm]
-  | Proj FITm Label
-  | Ann FITm FITy
-  | Seq [FITm]
-  | Rcd [(Label, FITm)]
-    -- Primitive operations
-  | Macro Name FITm
+data Tm = Var Name
+        | Lit Lit
+        | Lam [Pttrn {- Arguments -}] (Maybe Ty {- Return -}) Tm {- Body -}
+        | App Tm [Tm]
+        | Let Pttrn Tm Tm
+        | Cond Tm {- Pred -} Tm {- Then -} Tm {- Else -}
+        | Tuple [Tm]
+        | Proj Tm Label
+        | Ann Tm Ty
+        | Seq [Tm]
+        | Rcd [(Label, Tm)]
+          -- Primitive operations
+        | Macro Name Tm
   deriving (Show)
 
 data Ty   -- Explicit types
   = TyVar Name
   | TyPrim Prim
-  | TyArrow [FITy] FITy
-  | TyTuple [FITy]
-  | TyRcd [(Label, FITy)]
-  | TyApp FITy [FITy]
+  | TyArrow [Ty] Ty
+  | TyTuple [Ty]
+  | TyRcd [(Label, Ty)]
+  | TyApp Ty [Ty]
     -- Generated types
-  | TyCast FITy FITy
-  | TyLam [Name] FITy
+  | TyCast Ty Ty
+  | TyLam [Name] Ty
   deriving (Show)
 
 -- Other types
@@ -57,10 +55,6 @@ data Lit = LitNum Int
   deriving (Show)
 
 data Pttrn = PttrnAtom Name
-           | PttrnAnn (FI Pttrn) (FI Ty)
-           | PttrnTuple [FI Pttrn]
+           | PttrnAnn Pttrn Ty
+           | PttrnTuple [Pttrn]
   deriving (Show)
-
-type FITm = FI Tm
-
-type FITy = FI Ty

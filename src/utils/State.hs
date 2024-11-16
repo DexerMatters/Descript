@@ -5,127 +5,79 @@
 
 module State where
 
-import           Control.Monad.Except (ExceptT, MonadError(throwError)
-                                     , runExceptT)
-import           Control.Monad.State (MonadState(get, put), State, modify, gets
-                                    , runState, evalState, StateT(runStateT))
-import           Raw as R
-import           Tm as T
-import           Utils
-import           Val as V
 import           Prelude hiding (lookup)
-import           Dbg (printM)
+import           Control.Monad.Except (ExceptT, runExceptT)
+import           Control.Monad.State
+import qualified Val as V
+import qualified Tm as T
+import           Utils
+import           Data.Sequence ((|>), (!?), update, fromList)
+import           Data.Maybe (fromJust)
+import           Control.Monad (unless)
 
 --------------------------------------------------------------------------------
 -- States
 --------------------------------------------------------------------------------
 
-type PartialState e s a = ExceptT e (State s) a
+type EnvState s e a = ExceptT e (State s) a
 
-type TCState a = PartialState TCError Ctx a
+runEnvState :: s -> EnvState s e a -> (Either e a, s)
+runEnvState s f = runState (runExceptT f) s
 
-type TEState a = PartialState TEError TCtx a
+isolate :: EnvState s e a -> EnvState s e a
+isolate f = do
+  s0 <- get
+  a <- f
+  put s0
+  return a
 
-type (->>) a b = a -> TCState b
+type TmState a = EnvState T.Ctx T.TError a
 
-type (-->) a b = a -> TEState b
+runTmState :: TmState a -> (Either T.TError a, T.Ctx)
+runTmState = runEnvState
+  T.Ctx { T.vars = fromList [], T.constrs = fromList [] }
 
---------------------------------------------------------------------------------
--- Context
---------------------------------------------------------------------------------
+putVar :: Name -> T.Ty -> TmState Int
+putVar x t = do
+  vars <- gets T.vars
+  let i = length vars
+  modify $ \s -> s { T.vars = vars |> (x, t) }
+  return i
 
--- | Run a partial state with an initial context.
-runPartialState :: s -> PartialState e s a -> (Either e a, s)
-runPartialState s m = runState (runExceptT m) s
+newTyVar :: TmState Int
+newTyVar = do
+  constrs <- gets T.constrs
+  let i = length constrs
+  modify $ \s -> s { T.constrs = constrs |> T.Constr [] False }
+  return i
 
--- | Run a type-checking state with an initial context.
-runTCState :: TCState a -> (Either TCError a, Ctx)
-runTCState = runPartialState emptyCtx
+restrict :: Constraint T.Ty -> Int -> TmState ()
+restrict c i = do
+  constrs <- gets T.constrs
+  let constr = fromJust $ constrs !? i
+  let constr' = constr { T.elems = c:T.elems constr }
+  unless (T.locked constr)
+    $ modify
+    $ \s -> s { T.constrs = update i constr' constrs }
 
-runTEState :: TEState a -> Ctx -> (Either TEError a, TCtx)
-runTEState m ctx = runState (runExceptT m) (ctx2TCtx ctx)
-
--- | Infer the type of a variable by its name.
-inferVar :: FI R.Name ->> FI T.Ty
-inferVar (FI p x) = get
-  >>= \Ctx { vars, globalVars } -> case x `lookup` vars of
-    Just ty -> pure $ FI p ty
-    Nothing -> case x `lookup` globalVars of
-      Just ty -> pure $ FI p ty
-      Nothing -> throwError $ UnboundVar (p :| x)
-
-newVar :: R.Name -> T.Ty ->> T.Ty
-newVar x ty = do
-  ctx <- get
-  let vars' = insert x ty (vars ctx)
-  put ctx { vars = vars' }
-  pure ty
-
-newTVar :: R.Name -> T.Constr ->> T.Ty
-newTVar x k = do
-  ctx <- get
-  let tvars' = insert' x k (tvars ctx)
-  put ctx { tvars = tvars' }
-  return . T.TyVar . length $ tvars ctx
-
-addBot :: Int -> T.Ty ->> ()
-addBot i bot = do
-  tvars' <- gets tvars
-  printM $ "Adding bot: " ++ show bot ++ " to " ++ show i
-  printM $ "Current tvars: " ++ show tvars'
-  let f _ constr = Just
-        $ if locked constr
-          then constr
-          else constr { bots = bot:bots constr }
-  let updated = updateAt f i tvars'
-  modify $ \ctx -> ctx { tvars = updated }
-
-addTop :: Int -> T.Ty ->> ()
-addTop i top = do
-  tvars' <- gets tvars
-  let f _ constr = Just
-        $ if locked constr
-          then constr
-          else constr { tops = top:tops constr }
-  let updated = updateAt f i tvars'
-  modify $ \ctx -> ctx { tvars = updated }
-
-lockConstr :: Int ->> ()
+lockConstr :: Int -> TmState ()
 lockConstr i = do
-  tvars' <- gets tvars
-  let f _ constr = Just $ constr { locked = True }
-  let updated = updateAt f i tvars'
-  modify $ \ctx -> ctx { tvars = updated }
+  constrs <- gets T.constrs
+  let constr = fromJust $ constrs !? i
+  let constr' = constr { T.locked = True }
+  modify $ \s -> s { T.constrs = update i constr' constrs }
 
-ctx2TCtx :: Ctx -> TCtx
-ctx2TCtx Ctx { tvars, T.rcdSyms = rs } =
-  TCtx { border = Uninterpreted <$> elems tvars, types = [], V.rcdSyms = rs }
+type ValState a = EnvState V.Ctx V.TError a
 
-folkEnv :: PartialState e s a -> PartialState e s a
-folkEnv m = do
-  env0 <- get
-  res <- m
-  put env0
-  return res
+runValState :: T.Ctx -> ValState a -> (Either V.TError a, V.Ctx)
+runValState ctx = runEnvState (liftCtx ctx)
 
---------------------------------------------------------------------------------
--- Errors
---------------------------------------------------------------------------------
+putTypes :: [V.Ty] -> ValState ()
+putTypes tys = do
+  types <- gets V.types
+  modify $ \s -> s { V.types = types <> fromList tys }
 
-data TCError = UnboundVar (FI R.Name)
-             | UnboundType (FI R.Name)
-             | MissingLabel (FI R.Name)
-             | BadPattern (FI R.Pttrn) (FI T.Ty)
-             | NonProjectableType (FI T.Ty)
-             | DissatisfiedParameterCount (FI Int)
-  deriving (Show)
+liftCtx :: T.Ctx -> V.Ctx
+liftCtx T.Ctx { T.constrs = constrs } =
+  V.Ctx { V.types = fromList [], V.constrs = T.elems <$> constrs }
 
-data TEError = BadCast V.FITy V.FITy
-             | NotAFunctionType V.FITy
-             | NotATypeFunctionType V.FITy
-             | BadMatchedBorder V.FITy V.FITy V.FITy
-             | Unimplemented (FI String)
-             | BadConstraint (FI T.Constr)
-             | NonDeducibleArgumentType V.FITy
-             | DissatisfiedTypeParameterCount (FI Int)
-  deriving (Show)

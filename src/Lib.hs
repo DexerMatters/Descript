@@ -13,8 +13,8 @@ import           Control.Monad.Except
 import           Control.Monad.RWS.Lazy (MonadTrans(lift), MonadIO(liftIO))
 import           Data.Either (fromRight)
 import           State
-import           Checker
-import           TypeEval (eval)
+import           TypeInfer
+import           Subtyping
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"
@@ -27,13 +27,13 @@ someFunc = do
     Left err -> printErr $ show err
     Right tm -> do
       printInfo $ "Parsed term:\n" ++ show tm
-      case runTCState (infer tm) of
+      case runTmState (infer tm) of
         (Left err, _)   -> printErr $ show err
         (Right ty, ctx) -> do
           putStrLn "----------------------------"
           printInfo $ "Inferred type:\n" ++ show ty
           printInfo $ "Context:\n" ++ show ctx
-          case runTEState (eval ty) ctx of
+          case runValState ctx (eval ty) of
             (Left err, _)    -> printErr $ show err
             (Right ty, ctx') -> do
               putStrLn "----------------------------"

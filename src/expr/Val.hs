@@ -1,35 +1,30 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
+{-# LANGUAGE TypeOperators #-}
+
 module Val where
 
 import           Data.List (intercalate)
-import           Raw (Name)
-import           Tm (Constr, Prim)
+import           Data.Sequence (Seq)
 import qualified Tm as T (Ty(..))
-import           Utils (EvalState, FI)
+import           Tm (Prim)
+import           Utils
 
-type Border = (FITy, FITy)
+type Border = (Ty, Ty)
 
-type ConstrState = EvalState Tm.Constr Border
-
-type FITy = FI Ty
-
-data TCtx = TCtx { border :: [ConstrState], types :: [Ty], rcdSyms :: [Name] }
+data Ctx = Ctx { types :: Seq Ty, constrs :: Seq [Constraint T.Ty] }
   deriving (Show)
 
-data Closure = Closure { env :: TCtx, body :: FI T.Ty }
+data Closure = Closure { env :: Ctx, body :: T.Ty }
   deriving (Show)
 
 data Ty = TyVar Int
         | TyPrim Prim
-        | TyArrow [FITy] FITy
-        | TyTuple [FITy]
-        | TyRcd [(Name, FITy)]
+        | TyArrow [Ty] Ty
+        | TyTuple [Ty]
+        | TyRcd [(Name, Ty)]
         | TyLam Int Closure
-        | TySum FITy FITy
-        | TyUnion FITy FITy
-        | TyTop
-        | TyBot
+        | TyApp Ty [Ty]
 
 instance Show Ty where
   show (TyVar i) = show i
@@ -41,7 +36,15 @@ instance Show Ty where
     "{" ++ intercalate ", " (map (\(l, t) -> l ++ ": " ++ show t) tys) ++ "}"
   show (TyLam i (Closure _ tms)) =
     "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ show tms ++ ">"
-  show (TySum ty ty') = show ty ++ " + " ++ show ty'
-  show (TyUnion ty ty') = show ty ++ " | " ++ show ty'
-  show TyTop = "Top"
-  show TyBot = "Bot"
+  show (TyApp ty tys) =
+    show ty ++ "<" ++ intercalate ", " (map show tys) ++ ">"
+
+data TError = BadCast Ty Ty
+            | NotAFunctionType Ty
+            | NotATypeFunctionType Ty
+            | BadMatchedBorder Ty [Constraint T.Ty]
+            | Unimplemented String
+            | BadConstraint (Constraint T.Ty)
+            | NonDeducibleArgumentType Ty
+            | DissatisfiedTypeParameterCount Int
+  deriving (Show)
