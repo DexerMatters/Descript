@@ -1,7 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeOperators #-}
+
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
@@ -9,16 +7,16 @@
 
 module Pattern where
 
-import Control.Monad (void, zipWithM_)
-import Control.Monad.Error.Class (MonadError (throwError))
-import State
-import Tm (Pttrn (..), TError (BadPattern), Ty (..))
-import Prelude hiding (lookup)
+import           Control.Monad (void, zipWithM_)
+import           Control.Monad.Error.Class (MonadError(throwError))
+import           State
+import           Tm (Pttrn(..), TError(BadPattern), Ty(..))
+import           Prelude hiding (lookup)
 
 inferFromPattern :: Pttrn -> TmState Ty
 inferFromPattern = \case
-  PttrnAtom x -> do
-    ty <- newTyVar >>= pure . TyVar
+  PttrnAtom x   -> do
+    ty <- TyVar <$> newTyVar
     void $ putVar x ty
     return ty
   PttrnTuple ps -> do
@@ -27,8 +25,8 @@ inferFromPattern = \case
   PttrnAnn p ty -> checkFromPattern p ty >> return ty
 
 checkFromPattern :: Pttrn -> Ty -> TmState ()
-checkFromPattern = curry $
-  \case
+checkFromPattern = curry
+  $ \case
     (PttrnAtom x, ty) -> void $ putVar x ty
     (PttrnTuple ps, TyTuple tys) -> zipWithM_ checkFromPattern ps tys
     (p, ty) -> throwError $ BadPattern p ty

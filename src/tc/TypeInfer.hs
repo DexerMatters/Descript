@@ -1,15 +1,12 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
 module TypeInfer where
 
-import           Control.Arrow (second)
-import           Control.Monad (unless, zipWithM_, (>=>))
+import           Control.Monad (zipWithM_, (>=>))
 import           Control.Monad.Error.Class (MonadError(throwError))
-import           Control.Monad.State (MonadTrans(lift), gets)
+import           Control.Monad.State (gets)
 import           Data.Functor ((<&>))
 import           Pattern (inferFromPattern)
 import           Prelude hiding (lookup)
@@ -41,7 +38,7 @@ infer = \case
     l1 <- gets (length . T.constrs)
     let count = l1 - l0
     -- Create the return type of the function
-    retT <- maybe (pure bodyT) (liftType >=> (pure . T.TyCast bodyT)) ret
+    retT <- maybe (pure bodyT) (liftType >=> pure . T.TyCast bodyT) ret
     -- Lock all constraints created after the inference of the function
     -- so that they are not affected by the other scopes
     mapM_ lockConstr [l0 .. l1 - 1]

@@ -1,6 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeOperators #-}
 
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
@@ -69,11 +67,12 @@ V.TyPrim p <: V.TyPrim p' = pure $ p == p'
 -- | t is convertible to t if it is a subset of t's constraints
 t <: V.TyVar i = do
   constrs <- gets (fromJust . lookup i . V.constrs)
+  printM $ "Var <: Var: " ++ show t ++ " " ++ show constrs
   fmap and
     $ forM constrs
     $ \case
       Top a -> eval a >>= (t <:)
-      Bot a -> eval a >>= (<: t)
+      Bot a -> eval a >>= (t <:)
 V.TyVar i <: t = do
   constrs <- gets (fromJust . lookup i . V.constrs)
   fmap and
