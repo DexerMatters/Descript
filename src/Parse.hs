@@ -6,7 +6,14 @@ import           Control.Applicative (optional, (<|>))
 import           Control.Exception ()
 import           Data.Functor (($>))
 import           Data.Void (Void)
-import           Raw (Def(..), Lit(..), Prog(Prog), Pttrn(..), Tm(..), Ty(..))
+import Raw
+    ( Def(..),
+      Lit(..),
+      Prog(Prog),
+      Pttrn(..),
+      Tm(..),
+      Ty(..),
+      Prim(..) )
 import           Text.Megaparsec (MonadParsec(notFollowedBy, try), Parsec
                                 , anySingleBut, between, choice, many, sepBy
                                 , some)
@@ -15,7 +22,6 @@ import           Text.Megaparsec.Char (alphaNumChar, char, digitChar, lowerChar
                                      , newline, space1, upperChar)
 import qualified Text.Megaparsec.Char.Lexer as L
 import           Text.Megaparsec.Debug (MonadParsecDbg(dbg))
-import           Tm (Prim(..))
 
 preserved :: [String]
 preserved = [ "let"

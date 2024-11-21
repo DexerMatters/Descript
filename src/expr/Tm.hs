@@ -9,13 +9,18 @@ module Tm where
 import           Data.List (intercalate)
 import           Data.Sequence
 import           Utils
+import qualified Raw as R
 
-data Ctx = Ctx { vars :: Name |-> Ty, constrs :: Seq Constr }
+data Ctx =
+  Ctx { vars :: Name |-> Ty, constrs :: Seq Constr, symbols :: R.Symbols }
   deriving (Show)
+
+emptyCtx :: R.Symbols -> Ctx
+emptyCtx s = Ctx { vars = fromList [], constrs = fromList [], symbols = s }
 
 data Ty   -- Explicit types
   = TyVar Int
-  | TyPrim Prim
+  | TyPrim R.Prim
   | TyArrow [Ty] Ty
   | TyTuple [Ty]
   | TyRcd [(Label, Ty)]
@@ -26,13 +31,6 @@ data Ty   -- Explicit types
   | TyBiCast Ty Ty
   | TyMacro String Ty
 
-data Prim = PrimNum
-          | PrimBool
-          | PrimStr
-          | PrimUnit
-          | PrimUDT String
-  deriving (Eq)
-
 data Pttrn = PttrnAtom String
            | PttrnAnn Pttrn Ty
            | PttrnTuple [Pttrn]
@@ -42,14 +40,6 @@ data Pttrn = PttrnAtom String
 
 data Constr = Constr { elems :: [Constraint Ty], locked :: Bool }
   deriving (Show)
-
-instance Show Prim where
-  show :: Prim -> String
-  show PrimNum = "Number"
-  show PrimBool = "Bool"
-  show PrimStr = "String"
-  show PrimUnit = "Unit"
-  show (PrimUDT s) = s
 
 instance Show Ty where
   show :: Ty -> String
@@ -67,11 +57,3 @@ instance Show Ty where
   show (TyMacro s ty) = s ++ "!(" ++ show ty ++ ")"
   show (TyCast ty1 ty2) = show ty1 ++ " !=> " ++ show ty2
   show (TyBiCast ty1 ty2) = show ty1 ++ " <=> " ++ show ty2
-
-data TError = UnboundVar Name
-            | UnboundType Name
-            | MissingLabel Name
-            | BadPattern Pttrn Ty
-            | NonProjectableType Ty
-            | DissatisfiedParameterCount Int
-  deriving (Show)

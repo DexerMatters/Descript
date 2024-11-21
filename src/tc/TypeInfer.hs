@@ -11,25 +11,38 @@ import           Data.Functor ((<&>))
 import           Pattern (inferFromPattern)
 import           Prelude hiding (lookup)
 import qualified Raw as R
-import           State (TmState, lockConstr, newTyVar, restrict)
+import           State (TmState, lockConstr, newTyVar, restrict, isolateWith
+                      , newTyVarWithConstr)
 import qualified Tm as T
-import           Tm (TError(DissatisfiedParameterCount))
 import           TypeLift (liftPattern, liftType)
-import           Unification (unify)
+import           Unification (unify, collectArgConstrs, collectRetConstrs)
 import           Utils
 import           Data.List (lookup)
+import           Errors (RTError(NonProjectableType, UnboundVar, DissatisfiedParameterCount,
+        MissingLabel))
+import           Dbg (printM)
+import qualified Data.Sequence as Sequence
+import           Data.Maybe (fromJust)
 
 infer :: R.Tm -> TmState T.Ty
 infer = \case
-  R.Var x
-    -> (gets T.vars >>= maybe (throwError $ T.UnboundVar x) pure . (!!? x))
-  R.Lit l -> pure
+  R.Var x           -> do
+    ty <- gets ((!!? x) . T.vars)
+    case ty of
+      Just ty' -> pure ty'
+      Nothing  -> do
+        tm' <- gets ((!!? x) . R.terms . T.symbols)
+        -- s <- gets T.symbols
+        case tm' of
+          Just tm -> infer tm
+          Nothing -> throwError $ UnboundVar x
+  R.Lit l           -> pure
     $ T.TyPrim
     $ case l of
-      R.LitNum _  -> T.PrimNum
-      R.LitBool _ -> T.PrimBool
-      R.LitStr _  -> T.PrimStr
-      R.LitUnit   -> T.PrimUnit
+      R.LitNum _  -> R.PrimNum
+      R.LitBool _ -> R.PrimBool
+      R.LitStr _  -> R.PrimStr
+      R.LitUnit   -> R.PrimUnit
   R.Lam ps ret body -> do
     -- Infer types of the function and calculate the count of type arguments
     l0 <- gets (length . T.constrs)
@@ -47,47 +60,63 @@ infer = \case
       $ if count == 0
         then T.TyArrow tys retT
         else T.TyLam count $ T.TyArrow tys retT
-  R.App f arg -> do
+  R.App f arg       -> do
     -- First arg of T.TyReduce is the evidence of deduction
     fT <- infer f
     argT <- mapM infer arg
     case fT of
       T.TyArrow argT' retT
-        | length argT'
-          == length argT -> zipWithM_ unify argT' argT >> pure retT
+        | length argT' == length argT -> zipWithM_ unify argT' argT
+          >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
       T.TyLam _ (T.TyArrow argT' retT)
         | length argT' == length argT -> zipWithM_ unify argT' argT
           >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
-      _ -> error "not yet implemented"
-  R.Ann tm ty -> do
+      T.TyVar x -> do
+        constrs <- collectArgConstrs x
+        constrs' <- collectRetConstrs x
+        vars <- mapM newTyVarWithConstr constrs
+        ret <- newTyVarWithConstr constrs'
+        return $ T.TyApp (T.TyVar ret) argT (T.TyVar <$> vars)
+      _ -> error "App"
+  R.Ann tm ty       -> do
     ty' <- liftType ty
     tmT <- infer tm
     unify tmT ty'
     pure $ T.TyCast tmT ty'
-  R.Tuple tms -> T.TyTuple <$> mapM infer tms
-  R.Rcd tms -> T.TyRcd <$> mapM (secondM infer) tms
-  R.Proj tm l -> do
+  R.Tuple tms       -> T.TyTuple <$> mapM infer tms
+  R.Rcd tms         -> T.TyRcd <$> mapM (secondM infer) tms
+  R.Proj tm l       -> do
     tmT <- infer tm
     case tmT of
-      T.TyRcd flds -> maybe (throwError $ T.MissingLabel l) pure
-        $ lookup l flds
-      T.TyLam _ (T.TyRcd flds) -> maybe (throwError $ T.MissingLabel l) pure
+      T.TyRcd flds -> maybe (throwError $ MissingLabel l) pure $ lookup l flds
+      T.TyLam _ (T.TyRcd flds) -> maybe (throwError $ MissingLabel l) pure
         $ lookup l flds
       T.TyVar i -> do
         tvar <- newTyVar <&> T.TyVar
         restrict (Bot $ T.TyRcd [(l, tvar)]) i
         return tvar
-      _ -> throwError $ T.NonProjectableType tmT
-  R.Cond c t f -> do
+      _ -> throwError $ NonProjectableType tmT
+  R.Cond c t f      -> do
     cT <- infer c
     tT <- infer t
     fT <- infer f
-    unify cT (T.TyPrim T.PrimBool)
+    unify cT (T.TyPrim R.PrimBool)
     unify fT tT
     pure $ T.TyBiCast tT fT
-  R.Seq tms -> do
+  R.Seq tms         -> do
     mapM_ infer (init tms)
     infer (last tms)
-  _ -> error "not yet implemented"
+  R.Let p rhs body  -> do
+    rhsT <- infer rhs
+    l0 <- gets (length . T.constrs)
+    pT <- liftPattern p >>= inferFromPattern
+    l1 <- gets (length . T.constrs)
+    if l1 == l0
+      then return rhsT
+      else do
+        unify pT rhsT
+        bodyT <- infer body
+        return (T.TyApp bodyT [rhsT] [pT])
+  R.Macro _ _       -> error "Macro types"

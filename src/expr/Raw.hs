@@ -1,11 +1,16 @@
 {-# OPTIONS_GHC -Wno-missing-export-lists #-}
 
+{-# LANGUAGE TypeOperators #-}
+
 module Raw where
 
-import           Tm (Prim)
+import           Utils
 
 -- Syntax
 newtype Prog = Prog [Def]
+  deriving (Show)
+
+data Symbols = Symbols { terms :: Name |-> Tm, types :: Name |-> Ty }
   deriving (Show)
 
 type EnumField = (String, [Ty])
@@ -44,9 +49,6 @@ data Ty   -- Explicit types
   deriving (Show)
 
 -- Other types
-type Name = String
-
-type Label = String
 
 data Lit = LitNum Int
          | LitBool Bool
@@ -58,3 +60,17 @@ data Pttrn = PttrnAtom Name
            | PttrnAnn Pttrn Ty
            | PttrnTuple [Pttrn]
   deriving (Show)
+
+data Prim = PrimNum
+          | PrimBool
+          | PrimStr
+          | PrimUnit
+          | PrimUDT String
+  deriving (Eq)
+
+instance Show Prim where
+  show PrimNum = "Number"
+  show PrimBool = "Bool"
+  show PrimStr = "String"
+  show PrimUnit = "Unit"
+  show (PrimUDT s) = s

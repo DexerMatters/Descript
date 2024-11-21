@@ -7,7 +7,7 @@ module Val where
 import           Data.List (intercalate)
 import           Data.Sequence (Seq)
 import qualified Tm as T (Ty(..))
-import           Tm (Prim)
+import           Raw (Prim)
 import           Utils
 
 type Border = (Ty, Ty)
@@ -38,13 +38,3 @@ instance Show Ty where
     "Forall(" ++ show i ++ ")" ++ "." ++ "<" ++ show tms ++ ">"
   show (TyApp ty tys) =
     show ty ++ "<" ++ intercalate ", " (map show tys) ++ ">"
-
-data TError = BadCast Ty Ty
-            | NotAFunctionType Ty
-            | NotATypeFunctionType Ty
-            | BadMatchedBorder Ty [Constraint T.Ty]
-            | Unimplemented String
-            | BadConstraint (Constraint T.Ty)
-            | NonDeducibleArgumentType Ty
-            | DissatisfiedTypeParameterCount Int
-  deriving (Show)

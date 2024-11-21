@@ -10,8 +10,9 @@ module Pattern where
 import           Control.Monad (void, zipWithM_)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           State
-import           Tm (Pttrn(..), TError(BadPattern), Ty(..))
+import           Tm (Pttrn(..), Ty(..))
 import           Prelude hiding (lookup)
+import           Errors (RTError(..))
 
 inferFromPattern :: Pttrn -> TmState Ty
 inferFromPattern = \case

@@ -24,6 +24,10 @@ instance Functor Constraint where
   fmap f (Top a) = Top (f a)
   fmap f (Bot a) = Bot (f a)
 
+unwrap :: Constraint a -> a
+unwrap (Top a) = a
+unwrap (Bot a) = a
+
 -- | Sequence-based map
 type (|->) k v = Seq (k, v)
 
@@ -44,6 +48,11 @@ ran = fmap snd
 
 secondM :: Applicative f => (b -> f c) -> (a, b) -> f (a, c)
 secondM f (a, b) = (a, ) <$> f b
+
+-- | Lift a constraint
+liftConstraint :: Functor m => Constraint (m a) -> m (Constraint a)
+liftConstraint (Top ma) = Top <$> ma
+liftConstraint (Bot ma) = Bot <$> ma
 
 type MaybeTree a = Tree (Maybe a)
 

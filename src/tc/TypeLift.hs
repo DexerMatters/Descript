@@ -5,13 +5,21 @@
 module TypeLift where
 
 import qualified Raw as R
-import           State (TmState)
+import           State (TmState, isolateWith)
 import qualified Tm as T
 import           Utils
+import           Control.Monad.RWS (gets)
+import           Data.Sequence (fromList)
+import           Tm (emptyCtx)
 
 liftType :: R.Ty -> TmState T.Ty
 liftType = \case
-  R.TyVar _        -> pure $ error "not yet implemented"
+  R.TyVar x        -> do
+    ty <- gets ((!!? x) . R.types . T.symbols)
+    s <- gets T.symbols
+    case ty of
+      Just raw -> isolateWith (emptyCtx s) (liftType raw)
+      Nothing  -> error "not yet implemented"
   R.TyPrim p       -> pure $ T.TyPrim p
   R.TyArrow tys ty -> T.TyArrow <$> mapM liftType tys <*> liftType ty
   R.TyTuple tys    -> T.TyTuple <$> mapM liftType tys

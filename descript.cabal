@@ -30,7 +30,9 @@ library
       Raw
       Tm
       Val
+      Errors
       Pattern
+      Program
       Subtyping
       TypeInfer
       TypeLift

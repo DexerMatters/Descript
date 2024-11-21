@@ -1,6 +1,4 @@
-(
-  (a) => {
-    (a.one).two as Number;
-    a.fuck as Number
-  }
-)({one = {three = 23, two = 12}, fuck = 5, shit = 6})
+let main = (
+  let idStr = (x:String, y) => x
+  idStr(12, 12)
+)
