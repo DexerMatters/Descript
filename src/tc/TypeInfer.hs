@@ -74,6 +74,9 @@ infer = \case
           >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
       T.TyVar x -> do
+        -- TODO: There is a serious issue with this code:
+        -- Type variable that is introduced out of thin air won't be substituted
+        -- by a corresponding type lambda
         constrs <- collectArgConstrs x
         constrs' <- collectRetConstrs x
         vars <- mapM newTyVarWithConstr constrs

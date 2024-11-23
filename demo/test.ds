@@ -1,4 +1,5 @@
+let idStr = (x:String, y) => [x, y as Bool]
+
 let main = (
-  let idStr = (x:String, y) => x
-  idStr(12, 12)
+  idStr("12", true)
 )

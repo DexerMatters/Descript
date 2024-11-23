@@ -23,42 +23,41 @@ import           Errors (VTError(..))
 import           Data.Functor ((<&>))
 
 eval :: T.Ty -> ValState V.Ty
-eval = concretize pure
-  <=< \case
-    T.TyPrim p          -> pure $ V.TyPrim p
-    T.TyVar i           -> gets $ fromMaybe (V.TyVar i) . lookup i . V.types
-    T.TyArrow tys ty    -> V.TyArrow <$> mapM eval tys <*> eval ty
-    T.TyTuple tys       -> V.TyTuple <$> mapM eval tys
-    T.TyRcd tys         -> V.TyRcd <$> mapM (secondM eval) tys
-    T.TyLam i body      -> do
-      env <- get
-      return $ V.TyLam i $ V.Closure env body
-    T.TyApp ty tys tys' -> do
-      args <- mapM eval tys
-      holedArgs <- mapM eval tys'
-      printM $ "TyApp: " ++ show ty ++ " " ++ show tys ++ " " ++ show tys'
-      realArgs <- bool
-        {- Deduction with known args -}
-        (catMaybes . concat . levels . Node Nothing
-         <$> zipWithM deduce holedArgs args)
-        {- Deduction without known args (Self-Deduction) -}
-        (pure args)
-        (null holedArgs)
-      -- Evaluate the type with the yielded arguments
-      isolate $ putTypes realArgs >> eval ty
-    T.TyCast ty ty'     -> do
-      ty <- eval ty
-      ty' <- eval ty'
-      b <- ty <: ty'
-      unless b $ throwError $ BadCast ty ty'
-      return ty'
-    T.TyBiCast ty ty'   -> do
-      ty <- eval ty
-      ty' <- eval ty'
-      b <- (&&) <$> ty <: ty' <*> ty' <: ty
-      unless b $ throwError $ BadCast ty ty'
-      return ty
-    T.TyMacro _ _       -> throwError $ Unimplemented "Macro types"
+eval = \case
+  T.TyPrim p          -> pure $ V.TyPrim p
+  T.TyVar i           -> gets $ fromMaybe (V.TyVar i) . lookup i . V.types
+  T.TyArrow tys ty    -> V.TyArrow <$> mapM eval tys <*> eval ty
+  T.TyTuple tys       -> V.TyTuple <$> mapM eval tys
+  T.TyRcd tys         -> V.TyRcd <$> mapM (secondM eval) tys
+  T.TyLam i body      -> do
+    env <- get
+    return $ V.TyLam i $ V.Closure env body
+  T.TyApp ty tys tys' -> do
+    args <- mapM eval tys
+    holedArgs <- mapM eval tys'
+    printM $ "TyApp: " ++ show ty ++ " " ++ show tys ++ " " ++ show tys'
+    realArgs <- bool
+      {- Deduction with known args -}
+      (catMaybes . concat . levels . Node Nothing
+       <$> zipWithM deduce holedArgs args)
+      {- Deduction without known args (Self-Deduction) -}
+      (pure args)
+      (null holedArgs)
+    -- Evaluate the type with the yielded arguments
+    isolate $ putTypes realArgs >> eval ty
+  T.TyCast ty ty'     -> do
+    ty <- eval ty
+    ty' <- eval ty'
+    b <- ty <: ty'
+    unless b $ throwError $ BadCast ty ty'
+    return ty'
+  T.TyBiCast ty ty'   -> do
+    ty <- eval ty
+    ty' <- eval ty'
+    b <- (&&) <$> ty <: ty' <*> ty' <: ty
+    unless b $ throwError $ BadCast ty ty'
+    return ty
+  T.TyMacro _ _       -> throwError $ Unimplemented "Macro types"
 
 ($$) :: V.Closure -> [V.Ty] -> ValState V.Ty
 ($$) (V.Closure env tm) t = isolate $ put env >> putTypes t >> eval tm
@@ -119,7 +118,7 @@ deduce = curry
       b <- fmap and
         $ forM constrs
         $ \case
-          Bot a -> eval' a >>= (t <:)
+          Bot a -> eval a >>= (t <:)
           Top a -> eval a >>= (<: t)
       unless b $ throwError $ BadMatchedBorder t constrs
       deduced <- forM constrs
@@ -136,7 +135,8 @@ deduce = curry
       args <- zipWithM deduce tys' tys
       ret <- deduce ty ty'
       return $ Node Nothing $ args ++ [ret]
-    _ -> return $ Node Nothing []
+    (ty, ty') -> ty' <: ty
+      >>= bool (throwError $ BadCast ty' ty) (return $ Node Nothing [])
   where
     eval' :: T.Ty -> ValState V.Ty
     eval' = \case

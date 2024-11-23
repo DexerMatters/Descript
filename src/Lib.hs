@@ -39,7 +39,7 @@ someFunc = do
           putStrLn "----------------------------"
           printInfo $ "Inferred type:\n" ++ show ty
           printInfo $ "Context:\n" ++ show ctx
-          case runValState ctx (eval ty) of
+          case runValState ctx (eval ty >>= concretize pure) of
             (Left err, _)    -> printErr $ show err
             (Right ty, ctx') -> do
               putStrLn "----------------------------"
