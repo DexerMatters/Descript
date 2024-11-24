@@ -43,7 +43,22 @@ type TmState a = EnvState T.Ctx RTError a
 
 runTmState :: R.Symbols -> TmState a -> (Either RTError a, T.Ctx)
 runTmState s = runEnvState
-  T.Ctx { T.vars = fromList [], T.constrs = fromList [], T.symbols = s }
+  T.Ctx { T.vars = fromList []
+        , T.constrs = fromList []
+        , T.symbols = s
+        , T.level = 0
+        }
+
+freshIndex :: TmState Int
+freshIndex = do
+  l <- gets T.level
+  i <- gets (length . T.constrs)
+  return $ i - l
+
+updateLevel :: TmState ()
+updateLevel = do
+  i <- gets (length . T.constrs)
+  modify $ \s -> s { T.level = i }
 
 putVar :: Name -> T.Ty -> TmState Int
 putVar x t = do
@@ -52,19 +67,19 @@ putVar x t = do
   modify $ \s -> s { T.vars = vars |> (x, t) }
   return i
 
-newTyVar :: TmState Int
+newTyVar :: TmState (Int, Int)
 newTyVar = do
   constrs <- gets T.constrs
-  let i = length constrs
+  i <- freshIndex
   modify $ \s -> s { T.constrs = constrs |> T.Constr [] False }
-  return i
+  return (length constrs, i)
 
-newTyVarWithConstr :: [Constraint T.Ty] -> TmState Int
+newTyVarWithConstr :: [Constraint T.Ty] -> TmState (Int, Int)
 newTyVarWithConstr cs = do
   constrs <- gets T.constrs
-  let i = length constrs
+  i <- freshIndex
   modify $ \s -> s { T.constrs = constrs |> T.Constr cs True }
-  return i
+  return (length constrs, i)
 
 restrict :: Constraint T.Ty -> Int -> TmState ()
 restrict c i = do

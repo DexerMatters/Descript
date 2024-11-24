@@ -17,7 +17,7 @@ import           Errors (RTError(..))
 inferFromPattern :: Pttrn -> TmState Ty
 inferFromPattern = \case
   PttrnAtom x   -> do
-    ty <- TyVar <$> newTyVar
+    ty <- uncurry TyVar <$> newTyVar
     void $ putVar x ty
     return ty
   PttrnTuple ps -> do

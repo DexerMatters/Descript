@@ -21,11 +21,11 @@ import qualified Tm as V
 unify :: Ty -> Ty -> TmState ()
 unify = curry
   $ \case
-    (TyVar i, TyVar j) -> do
+    (TyVar i _, TyVar j _) -> do
       constrs' <- gets (fromJust . lookup j . constrs)
       mapM_ (`restrict` i) (elems constrs')
-    (TyVar i, ty) -> restrict (Bot ty) i
-    (ty, TyVar i) -> restrict (Top ty) i
+    (TyVar i _, ty) -> restrict (Bot ty) i
+    (ty, TyVar i _) -> restrict (Top ty) i
     ( TyApp ty tys _
       , TyApp ty' tys' _) -> unify ty ty' >> zipWithM_ unify tys tys'
     (TyTuple tys, TyTuple tys') -> zipWithM_ unify tys tys'

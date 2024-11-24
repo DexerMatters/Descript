@@ -11,15 +11,19 @@ import           Data.Sequence
 import           Utils
 import qualified Raw as R
 
-data Ctx =
-  Ctx { vars :: Name |-> Ty, constrs :: Seq Constr, symbols :: R.Symbols }
+data Ctx = Ctx { vars :: Name |-> Ty
+               , constrs :: Seq Constr
+               , symbols :: R.Symbols
+               , level :: Int
+               }
   deriving (Show)
 
 emptyCtx :: R.Symbols -> Ctx
-emptyCtx s = Ctx { vars = fromList [], constrs = fromList [], symbols = s }
+emptyCtx s =
+  Ctx { vars = fromList [], constrs = fromList [], symbols = s, level = 0 }
 
 data Ty   -- Explicit types
-  = TyVar Int
+  = TyVar Int {- Constraint Pointer -} Int {- Level -}
   | TyPrim R.Prim
   | TyArrow [Ty] Ty
   | TyTuple [Ty]
@@ -43,7 +47,7 @@ data Constr = Constr { elems :: [Constraint Ty], locked :: Bool }
 
 instance Show Ty where
   show :: Ty -> String
-  show (TyVar i) = "%T" ++ show i
+  show (TyVar _ l) = "%T" ++ show l
   show (TyPrim p) = show p
   show (TyArrow tys ty) =
     "(" ++ intercalate ", " (map show tys) ++ ") -> " ++ show ty

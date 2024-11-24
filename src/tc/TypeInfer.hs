@@ -12,7 +12,7 @@ import           Pattern (inferFromPattern, checkFromPattern)
 import           Prelude hiding (lookup)
 import qualified Raw as R
 import           State (TmState, lockConstr, newTyVar, restrict, isolateWith
-                      , newTyVarWithConstr)
+                      , newTyVarWithConstr, updateLevel)
 import qualified Tm as T
 import           TypeLift (liftPattern, liftType)
 import           Unification (unify, collectArgConstrs, collectRetConstrs)
@@ -49,6 +49,7 @@ infer = \case
     tys <- mapM (liftPattern >=> inferFromPattern) ps
     bodyT <- infer body
     l1 <- gets (length . T.constrs)
+    updateLevel
     let count = l1 - l0
     -- Create the return type of the function
     retT <- maybe (pure bodyT) (liftType >=> pure . T.TyCast bodyT) ret
@@ -73,7 +74,7 @@ infer = \case
         | length argT' == length argT -> zipWithM_ unify argT' argT
           >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
-      T.TyVar x -> do
+      T.TyVar x _ -> do
         -- TODO: There is a serious issue with this code:
         -- Type variable that is introduced out of thin air won't be substituted
         -- by a corresponding type lambda
@@ -81,7 +82,7 @@ infer = \case
         constrs' <- collectRetConstrs x
         vars <- mapM newTyVarWithConstr constrs
         ret <- newTyVarWithConstr constrs'
-        return $ T.TyApp (T.TyVar ret) argT (T.TyVar <$> vars)
+        return $ T.TyApp (uncurry T.TyVar ret) argT (uncurry T.TyVar <$> vars)
       _ -> error "App"
   R.Ann tm ty       -> do
     ty' <- liftType ty
@@ -96,8 +97,8 @@ infer = \case
       T.TyRcd flds -> maybe (throwError $ MissingLabel l) pure $ lookup l flds
       T.TyLam _ (T.TyRcd flds) -> maybe (throwError $ MissingLabel l) pure
         $ lookup l flds
-      T.TyVar i -> do
-        tvar <- newTyVar <&> T.TyVar
+      T.TyVar i _ -> do
+        tvar <- newTyVar <&> uncurry T.TyVar
         restrict (Bot $ T.TyRcd [(l, tvar)]) i
         return tvar
       _ -> throwError $ NonProjectableType tmT
@@ -114,8 +115,6 @@ infer = \case
   R.Let p rhs body  -> do
     rhsT <- infer rhs
     liftPattern p >>= flip checkFromPattern rhsT
-    env <- gets T.vars
-    printM $ "Params: " ++ show p ++ " RHS: " ++ show rhsT
-    printM $ "Env: " ++ show env
+    updateLevel
     infer body
   R.Macro _ _       -> error "Macro types"

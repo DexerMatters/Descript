@@ -25,7 +25,7 @@ import           Data.Functor ((<&>))
 eval :: T.Ty -> ValState V.Ty
 eval = \case
   T.TyPrim p          -> pure $ V.TyPrim p
-  T.TyVar i           -> gets $ fromMaybe (V.TyVar i) . lookup i . V.types
+  T.TyVar i l         -> gets $ fromMaybe (V.TyVar i l) . lookup l . V.types
   T.TyArrow tys ty    -> V.TyArrow <$> mapM eval tys <*> eval ty
   T.TyTuple tys       -> V.TyTuple <$> mapM eval tys
   T.TyRcd tys         -> V.TyRcd <$> mapM (secondM eval) tys
@@ -71,14 +71,14 @@ eval = \case
 -- | Prim types are convertible only if they are the same
 V.TyPrim p <: V.TyPrim p' = pure $ p == p'
 -- | t is convertible to t if it is a subset of t's constraints
-t <: V.TyVar i = do
+t <: V.TyVar i _ = do
   constrs <- gets (fromJust . lookup i . V.constrs)
   fmap and
     $ forM constrs
     $ \case
       Top a -> eval a >>= (t <:)
       Bot a -> eval a >>= (t <:)
-V.TyVar i <: t = do
+V.TyVar i _ <: t = do
   constrs <- gets (fromJust . lookup i . V.constrs)
   fmap and
     $ forM constrs
@@ -99,16 +99,16 @@ V.TyRcd flds <: V.TyRcd flds' = do
   s <- sequence [ty <: ty' | (l, ty) <- flds, (l', ty') <- flds', l == l']
   printM $ "Rcd <: Rcd: " ++ show s
   return $ and s && length flds' == length s
-V.TyLam i cls <: ty = do
-  let base = length $ V.types (V.env cls)
-  let vars = V.TyVar <$> [base .. base + i - 1]
-  ret <- cls $$ vars
-  ret <: ty
-ty <: V.TyLam i cls = do
-  let base = length $ V.types (V.env cls)
-  let vars = V.TyVar <$> [base .. base + i - 1]
-  ret <- cls $$ vars
-  ty <: ret
+-- V.TyLam i cls <: ty = do
+--   let base = length $ V.types (V.env cls)
+--   let vars = V.TyVar <$> [base .. base + i - 1]
+--   ret <- cls $$ vars
+--   ret <: ty
+-- ty <: V.TyLam i cls = do
+--   let base = length $ V.types (V.env cls)
+--   let vars = V.TyVar <$> [base .. base + i - 1]
+--   ret <- cls $$ vars
+--   ty <: ret
 _ <: _ = pure False
 
 type DeductionTree = Tree (Maybe V.Ty)
@@ -117,7 +117,7 @@ type DeductionTree = Tree (Maybe V.Ty)
 deduce :: V.Ty -> V.Ty -> ValState DeductionTree
 deduce = curry
   $ \case
-    (V.TyVar i, t) -> do
+    (V.TyVar i _, t) -> do
       constrs <- gets (fromJust . lookup i . V.constrs)
       printM $ "Deduce: " ++ show t ++ " " ++ show constrs
       b <- fmap and
@@ -142,15 +142,3 @@ deduce = curry
       return $ Node Nothing $ args ++ [ret]
     (ty, ty') -> ty' <: ty
       >>= bool (throwError $ BadCast ty' ty) (return $ Node Nothing [])
-  where
-    eval' :: T.Ty -> ValState V.Ty
-    eval' = \case
-      T.TyVar i -> pure $ V.TyVar i
-      ty        -> eval ty
-
-concretize :: (V.Ty -> ValState V.Ty) -> V.Ty -> ValState V.Ty
-concretize handler v@(V.TyVar i) = gets (fromJust . lookup i . V.constrs)
-  >>= \case
-    [Bot x] -> eval x >>= concretize handler
-    _       -> handler v
-concretize _ t = pure t

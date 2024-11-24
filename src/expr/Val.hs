@@ -18,7 +18,7 @@ data Ctx = Ctx { types :: Seq Ty, constrs :: Seq [Constraint T.Ty] }
 data Closure = Closure { env :: Ctx, body :: T.Ty }
   deriving (Show)
 
-data Ty = TyVar Int
+data Ty = TyVar Int Int
         | TyPrim Prim
         | TyArrow [Ty] Ty
         | TyTuple [Ty]
@@ -27,7 +27,7 @@ data Ty = TyVar Int
         | TyApp Ty [Ty]
 
 instance Show Ty where
-  show (TyVar i) = show i
+  show (TyVar _ i) = show i
   show (TyPrim p) = show p
   show (TyArrow tys ty) =
     "(" ++ intercalate ", " (map show tys) ++ ") -> " ++ show ty
