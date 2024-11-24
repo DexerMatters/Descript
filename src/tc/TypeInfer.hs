@@ -8,7 +8,7 @@ import           Control.Monad (zipWithM_, (>=>))
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           Control.Monad.State (gets)
 import           Data.Functor ((<&>))
-import           Pattern (inferFromPattern)
+import           Pattern (inferFromPattern, checkFromPattern)
 import           Prelude hiding (lookup)
 import qualified Raw as R
 import           State (TmState, lockConstr, newTyVar, restrict, isolateWith
@@ -27,11 +27,11 @@ import           Data.Maybe (fromJust)
 infer :: R.Tm -> TmState T.Ty
 infer = \case
   R.Var x           -> do
-    ty <- gets ((!!? x) . T.vars)
+    ty <- gets ((!!?~ x) . T.vars)
     case ty of
       Just ty' -> pure ty'
       Nothing  -> do
-        tm' <- gets ((!!? x) . R.terms . T.symbols)
+        tm' <- gets ((!!?~ x) . R.terms . T.symbols)
         -- s <- gets T.symbols
         case tm' of
           Just tm -> infer tm
@@ -113,13 +113,9 @@ infer = \case
     infer (last tms)
   R.Let p rhs body  -> do
     rhsT <- infer rhs
-    l0 <- gets (length . T.constrs)
-    pT <- liftPattern p >>= inferFromPattern
-    l1 <- gets (length . T.constrs)
-    if l1 == l0
-      then return rhsT
-      else do
-        unify pT rhsT
-        bodyT <- infer body
-        return (T.TyApp bodyT [rhsT] [pT])
+    liftPattern p >>= flip checkFromPattern rhsT
+    env <- gets T.vars
+    printM $ "Params: " ++ show p ++ " RHS: " ++ show rhsT
+    printM $ "Env: " ++ show env
+    infer body
   R.Macro _ _       -> error "Macro types"

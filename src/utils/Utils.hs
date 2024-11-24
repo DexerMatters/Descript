@@ -46,6 +46,12 @@ ran = fmap snd
   | otherwise = xs !!? k
 (!!?) Empty _ = Nothing
 
+(!!?~) :: (Eq k) => k |-> v -> k -> Maybe v
+(!!?~) (xs :|> (k', v)) k
+  | k == k' = Just v
+  | otherwise = xs !!? k
+(!!?~) Empty _ = Nothing
+
 secondM :: Applicative f => (b -> f c) -> (a, b) -> f (a, c)
 secondM f (a, b) = (a, ) <$> f b
 

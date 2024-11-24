@@ -35,7 +35,10 @@ eval = \case
   T.TyApp ty tys tys' -> do
     args <- mapM eval tys
     holedArgs <- mapM eval tys'
-    printM $ "TyApp: " ++ show ty ++ " " ++ show tys ++ " " ++ show tys'
+    printM $ "TyApp: " ++ show args ++ " " ++ show holedArgs
+    deduced <- catMaybes . concat . levels . Node Nothing
+      <$> zipWithM deduce holedArgs args
+    printM $ "Deduced: " ++ show deduced
     realArgs <- bool
       {- Deduction with known args -}
       (catMaybes . concat . levels . Node Nothing
@@ -43,6 +46,8 @@ eval = \case
       {- Deduction without known args (Self-Deduction) -}
       (pure args)
       (null holedArgs)
+    types <- gets V.types
+    printM $ "Real args: " ++ show types
     -- Evaluate the type with the yielded arguments
     isolate $ putTypes realArgs >> eval ty
   T.TyCast ty ty'     -> do

@@ -1,2 +1,5 @@
+
+import           Data.Sequence (fromList)
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = putStrLn "Hello, Haskell!"

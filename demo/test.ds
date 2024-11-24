@@ -1,5 +1,6 @@
-let idStr = (x:String, y) => [x, y as Bool]
-
 let main = (
-  idStr("12", true)
+  let record = {length = 12, elems = "122"}
+  let getLength = (r) => r.length
+  let getElems = (x) => x.elems
+  getElems(record)
 )
