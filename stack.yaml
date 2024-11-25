@@ -36,6 +36,10 @@ packages:
 extra-deps:
   - megaparsec-9.5.0
   - mtl-2.3.1
+  - pretty-tree-0.1.0.0
+
+  - boxes-0.1.5
+  - split-0.2.5
   - containers-0.6.7
   - vector-0.13.2.0
   - case-insensitive-1.2.1.0

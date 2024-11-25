@@ -17,6 +17,8 @@ import           Errors (RTError(NonApplicableType))
 import           Data.List (transpose)
 import           Data.Functor ((<&>))
 import qualified Tm as V
+import qualified Data.List as Data.Sequence
+import           Data.Foldable (Foldable(toList))
 
 unify :: Ty -> Ty -> TmState ()
 unify = curry
@@ -40,11 +42,11 @@ collectArgConstrs i = do
   constrs' <- gets (elems . fromJust . lookup i . constrs)
   mapM
     liftConstraint
-    (flip map constrs'
+    (flip fmap (toList constrs')
      $ fmap
      $ \case
        TyArrow tys _ -> pure tys
-       TyLam _ (TyArrow tys _) -> pure tys
+       TyLam _ _ (TyArrow tys _) -> pure tys
        ty -> throwError $ NonApplicableType ty)
     <&> transpose . fmap liftConstraint
 
@@ -52,9 +54,9 @@ collectRetConstrs :: Int -> TmState [Constraint Ty]
 collectRetConstrs i = do
   constrs' <- gets (elems . fromJust . lookup i . constrs)
   mapM liftConstraint
-    $ flip fmap constrs'
+    $ flip fmap (toList constrs')
     $ fmap
     $ \case
       TyArrow _ ty -> pure ty
-      TyLam _ (TyArrow _ ty) -> pure ty
+      TyLam _ _ (TyArrow _ ty) -> pure ty
       ty -> throwError $ NonApplicableType ty

@@ -20,6 +20,8 @@ import           Subtyping
 import           Program (getDefinitions)
 import           Raw (Symbols(terms))
 import           Utils
+import           TypeQuote (quote)
+import           Control.Monad ((>=>))
 
 path :: String
 path = "/home/dexer/Repos/haskell/descript/demo/test.ds"
@@ -39,9 +41,9 @@ someFunc = do
           putStrLn "----------------------------"
           printInfo $ "Inferred type:\n" ++ show ty
           printInfo $ "Context:\n" ++ show ctx
-          case runValState ctx (eval ty) of
+          case runValState ctx (eval ty >>= quote) of
             (Left err, _)    -> printErr $ show err
             (Right ty, ctx') -> do
               putStrLn "----------------------------"
-              printInfo $ "Evaluated type:\n" ++ show ty
+              printInfo $ "Evaluated type:\n" ++ ty
               printInfo $ "Context:\n" ++ show ctx'

@@ -11,8 +11,8 @@ import           Data.Functor ((<&>))
 import           Pattern (inferFromPattern, checkFromPattern)
 import           Prelude hiding (lookup)
 import qualified Raw as R
-import           State (TmState, lockConstr, newTyVar, restrict, isolateWith
-                      , newTyVarWithConstr, updateLevel)
+import           State (TmState, lockConstr, newTyVar, restrict
+                      , newTyVarWithConstr, updateLevel, isLocked)
 import qualified Tm as T
 import           TypeLift (liftPattern, liftType)
 import           Unification (unify, collectArgConstrs, collectRetConstrs)
@@ -20,9 +20,6 @@ import           Utils
 import           Data.List (lookup)
 import           Errors (RTError(NonProjectableType, UnboundVar, DissatisfiedParameterCount,
         MissingLabel))
-import           Dbg (printM)
-import qualified Data.Sequence as Sequence
-import           Data.Maybe (fromJust)
 
 infer :: R.Tm -> TmState T.Ty
 infer = \case
@@ -60,7 +57,7 @@ infer = \case
     pure
       $ if count == 0
         then T.TyArrow tys retT
-        else T.TyLam count $ T.TyArrow tys retT
+        else T.TyLam l0 count $ T.TyArrow tys retT
   R.App f arg       -> do
     -- First arg of T.TyReduce is the evidence of deduction
     fT <- infer f
@@ -70,19 +67,24 @@ infer = \case
         | length argT' == length argT -> zipWithM_ unify argT' argT
           >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
-      T.TyLam _ (T.TyArrow argT' retT)
+      T.TyLam _ _ (T.TyArrow argT' retT)
         | length argT' == length argT -> zipWithM_ unify argT' argT
           >> pure (T.TyApp retT argT argT')
         | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
       T.TyVar x _ -> do
-        -- TODO: There is a serious issue with this code:
-        -- Type variable that is introduced out of thin air won't be substituted
-        -- by a corresponding type lambda
-        constrs <- collectArgConstrs x
-        constrs' <- collectRetConstrs x
-        vars <- mapM newTyVarWithConstr constrs
-        ret <- newTyVarWithConstr constrs'
-        return $ T.TyApp (uncurry T.TyVar ret) argT (uncurry T.TyVar <$> vars)
+        b <- isLocked x
+        if b
+          then do
+            constrs <- collectArgConstrs x
+            constrs' <- collectRetConstrs x
+            vars <- mapM newTyVarWithConstr constrs
+            ret <- newTyVarWithConstr constrs'
+            return
+              $ T.TyApp (uncurry T.TyVar ret) argT (uncurry T.TyVar <$> vars)
+          else do
+            tvar <- newTyVar <&> uncurry T.TyVar
+            restrict (Bot $ T.TyArrow argT tvar) x
+            return tvar
       _ -> error "App"
   R.Ann tm ty       -> do
     ty' <- liftType ty
@@ -95,7 +97,7 @@ infer = \case
     tmT <- infer tm
     case tmT of
       T.TyRcd flds -> maybe (throwError $ MissingLabel l) pure $ lookup l flds
-      T.TyLam _ (T.TyRcd flds) -> maybe (throwError $ MissingLabel l) pure
+      T.TyLam _ _ (T.TyRcd flds) -> maybe (throwError $ MissingLabel l) pure
         $ lookup l flds
       T.TyVar i _ -> do
         tvar <- newTyVar <&> uncurry T.TyVar

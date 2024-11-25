@@ -9,7 +9,7 @@ import           Control.Monad.State
 import qualified Val as V
 import qualified Tm as T
 import           Utils
-import           Data.Sequence ((|>), (!?), update, fromList)
+import           Data.Sequence ((|>), (!?), update, fromList, Seq(Empty))
 import           Data.Maybe (fromJust, isNothing)
 import           Control.Monad (unless)
 import qualified Raw as R
@@ -100,6 +100,21 @@ lockConstr i = do
   let constr' = constr { T.locked = True }
   modify $ \s -> s { T.constrs = update i constr' constrs }
 
+isLocked :: Int -> TmState Bool
+isLocked i = do
+  constrs <- gets T.constrs
+  return $ T.locked $ fromJust $ constrs !? i
+
+fresh :: Int -> ValState String
+fresh i = do
+  freshMap <- gets V.fresh
+  case freshMap !!? i of
+    Just j  -> return $ "τ" ++ show j
+    Nothing -> do
+      let j = length freshMap
+      modify $ \s -> s { V.fresh = freshMap |> (i, j) }
+      return $ "τ" ++ show j
+
 type ValState a = EnvState V.Ctx VTError a
 
 runValState :: T.Ctx -> ValState a -> (Either VTError a, V.Ctx)
@@ -112,7 +127,10 @@ putTypes tys = do
 
 liftCtx :: T.Ctx -> V.Ctx
 liftCtx T.Ctx { T.constrs = constrs } =
-  V.Ctx { V.types = fromList [], V.constrs = T.elems <$> constrs }
+  V.Ctx { V.types = fromList []
+        , V.constrs = T.elems <$> constrs
+        , V.fresh = Empty
+        }
 
 type ProgState a = EnvState R.Symbols ProgError a
 

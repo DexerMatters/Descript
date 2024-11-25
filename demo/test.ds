@@ -1,6 +1,5 @@
 let main = (
-  let record = {length = 12, elems = [true, 2333, "Hey"]}
-  let getLength = (x) => x.length
-  let getElems = (x) => x.elems
-  [getLength(record), getElems(record)]
+  let id = (x) => {x(12); x(true); x}
+  let f = (x) => x
+  id(f)
 )

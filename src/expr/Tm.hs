@@ -30,7 +30,7 @@ data Ty   -- Explicit types
   | TyRcd [(Label, Ty)]
   | TyApp Ty [Ty] [Ty]
     -- Generated types
-  | TyLam Int Ty
+  | TyLam Int Int Ty
   | TyCast Ty Ty
   | TyBiCast Ty Ty
   | TyMacro String Ty
@@ -57,7 +57,7 @@ instance Show Ty where
     ++ "}"
   show (TyApp ty _ tys) =
     show ty ++ "<" ++ intercalate ", " (map show tys) ++ ">"
-  show (TyLam i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ show ty
+  show (TyLam _ i ty) = "Forall(" ++ show i ++ ")" ++ "." ++ show ty
   show (TyMacro s ty) = s ++ "!(" ++ show ty ++ ")"
   show (TyCast ty1 ty2) = show ty1 ++ " !=> " ++ show ty2
   show (TyBiCast ty1 ty2) = show ty1 ++ " <=> " ++ show ty2

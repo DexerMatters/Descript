@@ -18,27 +18,28 @@ import           Data.Bool (bool)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           Dbg (printM)
 import           Data.Graph (Tree(Node))
-import           Data.Tree (levels)
+import           Data.Tree (levels, drawForest)
 import           Errors (VTError(..))
 import           Data.Functor ((<&>))
 
 eval :: T.Ty -> ValState V.Ty
 eval = \case
   T.TyPrim p          -> pure $ V.TyPrim p
-  T.TyVar i l         -> gets $ fromMaybe (V.TyVar i l) . lookup l . V.types
+  T.TyVar i l         -> gets $ fromMaybe (V.TyVar i) . lookup l . V.types
   T.TyArrow tys ty    -> V.TyArrow <$> mapM eval tys <*> eval ty
   T.TyTuple tys       -> V.TyTuple <$> mapM eval tys
   T.TyRcd tys         -> V.TyRcd <$> mapM (secondM eval) tys
-  T.TyLam i body      -> do
+  T.TyLam b i body    -> do
     env <- get
-    return $ V.TyLam i $ V.Closure env body
+    return $ V.TyLam b i $ V.Closure env body
   T.TyApp ty tys tys' -> do
     args <- mapM eval tys
     holedArgs <- mapM eval tys'
     printM $ "TyApp: " ++ show args ++ " " ++ show holedArgs
-    deduced <- catMaybes . concat . levels . Node Nothing
-      <$> zipWithM deduce holedArgs args
-    printM $ "Deduced: " ++ show deduced
+    deduced <- zipWithM deduce holedArgs args
+    printM $ "Deduced: " ++ drawForest (fmap (fmap show) deduced)
+    types <- gets V.types
+    printM $ "Types: " ++ show types
     realArgs <- bool
       {- Deduction with known args -}
       (catMaybes . concat . levels . Node Nothing
@@ -46,8 +47,6 @@ eval = \case
       {- Deduction without known args (Self-Deduction) -}
       (pure args)
       (null holedArgs)
-    types <- gets V.types
-    printM $ "Real args: " ++ show types
     -- Evaluate the type with the yielded arguments
     isolate $ putTypes realArgs >> eval ty
   T.TyCast ty ty'     -> do
@@ -71,14 +70,14 @@ eval = \case
 -- | Prim types are convertible only if they are the same
 V.TyPrim p <: V.TyPrim p' = pure $ p == p'
 -- | t is convertible to t if it is a subset of t's constraints
-t <: V.TyVar i _ = do
+t <: V.TyVar i = do
   constrs <- gets (fromJust . lookup i . V.constrs)
   fmap and
     $ forM constrs
     $ \case
       Top a -> eval a >>= (t <:)
       Bot a -> eval a >>= (t <:)
-V.TyVar i _ <: t = do
+V.TyVar i <: t = do
   constrs <- gets (fromJust . lookup i . V.constrs)
   fmap and
     $ forM constrs
@@ -99,16 +98,14 @@ V.TyRcd flds <: V.TyRcd flds' = do
   s <- sequence [ty <: ty' | (l, ty) <- flds, (l', ty') <- flds', l == l']
   printM $ "Rcd <: Rcd: " ++ show s
   return $ and s && length flds' == length s
--- V.TyLam i cls <: ty = do
---   let base = length $ V.types (V.env cls)
---   let vars = V.TyVar <$> [base .. base + i - 1]
---   ret <- cls $$ vars
---   ret <: ty
--- ty <: V.TyLam i cls = do
---   let base = length $ V.types (V.env cls)
---   let vars = V.TyVar <$> [base .. base + i - 1]
---   ret <- cls $$ vars
---   ty <: ret
+V.TyLam base i cls <: ty = do
+  let vars = V.TyVar <$> [base .. base + i - 1]
+  ret <- cls $$ vars
+  ret <: ty
+ty <: V.TyLam base i cls = do
+  let vars = V.TyVar <$> [base .. base + i - 1]
+  ret <- cls $$ vars
+  ty <: ret
 _ <: _ = pure False
 
 type DeductionTree = Tree (Maybe V.Ty)
@@ -117,9 +114,9 @@ type DeductionTree = Tree (Maybe V.Ty)
 deduce :: V.Ty -> V.Ty -> ValState DeductionTree
 deduce = curry
   $ \case
-    (V.TyVar i _, t) -> do
+    (V.TyVar _, V.TyVar _) -> return $ Node Nothing []
+    (V.TyVar i, t) -> do
       constrs <- gets (fromJust . lookup i . V.constrs)
-      printM $ "Deduce: " ++ show t ++ " " ++ show constrs
       b <- fmap and
         $ forM constrs
         $ \case
@@ -130,7 +127,7 @@ deduce = curry
         $ \case
           Top a -> eval a >>= flip deduce t
           Bot a -> eval a >>= flip deduce t
-      return $ Node (Just t) deduced
+      return $ Node (Just t) (reverse deduced)
     ( V.TyTuple tys
       , V.TyTuple tys') -> Node Nothing <$> zipWithM deduce tys tys'
     (V.TyRcd flds, V.TyRcd flds') -> Node Nothing
@@ -140,5 +137,15 @@ deduce = curry
       args <- zipWithM deduce tys' tys
       ret <- deduce ty ty'
       return $ Node Nothing $ args ++ [ret]
+    (V.TyLam base i cls, ty) -> do
+      let vars = V.TyVar <$> [base .. base + i - 1]
+      ret <- cls $$ vars
+      printM $ "Deduce: " ++ show ret ++ " <: " ++ show ty
+      deduce ret ty
+    (ty, V.TyLam base i cls) -> do
+      let vars = V.TyVar <$> [base .. base + i - 1]
+      ret <- cls $$ vars
+      printM $ "Deduce: " ++ show ty ++ " <: " ++ show ret
+      deduce ty ret
     (ty, ty') -> ty' <: ty
       >>= bool (throwError $ BadCast ty' ty) (return $ Node Nothing [])
