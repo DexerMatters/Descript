@@ -4,7 +4,7 @@ module Errors where
 
 import qualified Tm as T
 import qualified Val as V
-import           Utils
+import           Utils (Constraint, Name)
 
 data VTError = BadCast V.Ty V.Ty
              | NotAFunctionType V.Ty

@@ -5,10 +5,11 @@ module State where
 import           Prelude hiding (lookup)
 import           Control.Monad.Except (ExceptT, runExceptT
                                      , MonadError(throwError))
-import           Control.Monad.State
+import           Control.Monad.State (State, gets, modify, runState
+                                    , MonadState(put, get))
 import qualified Val as V
 import qualified Tm as T
-import           Utils
+import           Utils (Constraint, Name, (!!?))
 import           Data.Sequence ((|>), (!?), update, fromList, Seq(Empty))
 import           Data.Maybe (fromJust, isNothing)
 import           Control.Monad (unless)
@@ -109,11 +110,11 @@ fresh :: Int -> ValState String
 fresh i = do
   freshMap <- gets V.fresh
   case freshMap !!? i of
-    Just j  -> return $ "τ" ++ show j
+    Just j  -> return $ pure (['α' .. 'ω'] !! j)
     Nothing -> do
       let j = length freshMap
       modify $ \s -> s { V.fresh = freshMap |> (i, j) }
-      return $ "τ" ++ show j
+      return $ pure (['α' .. 'ω'] !! j)
 
 type ValState a = EnvState V.Ctx VTError a
 

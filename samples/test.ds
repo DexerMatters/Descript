@@ -1,0 +1,4 @@
+let main = (
+  let fuck = (a) => if (a.x) { a.y as Number } else { a.z }
+  fuck
+)

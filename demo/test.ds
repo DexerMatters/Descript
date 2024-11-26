@@ -1,5 +1,0 @@
-let main = (
-  let id = (x) => {x(12); x(true); x}
-  let f = (x) => x
-  id(f)
-)

@@ -7,9 +7,8 @@ module TypeLift where
 import qualified Raw as R
 import           State (TmState, isolateWith)
 import qualified Tm as T
-import           Utils
+import           Utils ((!!?), secondM)
 import           Control.Monad.RWS (gets)
-import           Data.Sequence (fromList)
 import           Tm (emptyCtx)
 
 liftType :: R.Ty -> TmState T.Ty

@@ -109,7 +109,7 @@ infer = \case
     tT <- infer t
     fT <- infer f
     unify cT (T.TyPrim R.PrimBool)
-    unify fT tT
+    unify tT fT
     pure $ T.TyBiCast tT fT
   R.Seq tms         -> do
     mapM_ infer (init tms)

@@ -5,9 +5,9 @@
 module Program where
 
 import qualified Raw as R
-import           State
+import           State (putTermDef, putTypeDef, runEnvState, ProgState)
 import           Raw (Prog(Prog))
-import           Control.Monad.State
+import           Control.Monad.State (MonadState(get))
 import           Errors (ProgError)
 import           Control.Applicative (Alternative(empty))
 

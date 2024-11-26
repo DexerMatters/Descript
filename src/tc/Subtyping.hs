@@ -5,13 +5,13 @@
 
 module Subtyping where
 
-import           Control.Monad
-import           Control.Monad.State
+import           Control.Monad (unless, zipWithM, forM)
+import           Control.Monad.State (gets, MonadState(put, get))
 import           Data.Maybe (fromJust, fromMaybe, catMaybes)
-import           Data.Sequence hiding (reverse, null, length)
+import           Data.Sequence (lookup)
 import           State (ValState, isolate, putTypes)
 import qualified Tm as T
-import           Utils
+import           Utils (Constraint(Bot, Top), secondM)
 import qualified Val as V
 import           Prelude hiding (lookup)
 import           Data.Bool (bool)
@@ -20,7 +20,6 @@ import           Dbg (printM)
 import           Data.Graph (Tree(Node))
 import           Data.Tree (levels, drawForest)
 import           Errors (VTError(..))
-import           Data.Functor ((<&>))
 
 eval :: T.Ty -> ValState V.Ty
 eval = \case

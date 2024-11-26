@@ -3,21 +3,17 @@
 module Unification where
 
 import           Control.Monad (zipWithM_)
-import           State
+import           State (restrict, TmState)
 import           Tm (Ty(..), Ctx(constrs), Constr(elems))
 import           Utils (Constraint(Bot, Top), liftConstraint)
 import           Control.Monad.State (gets)
 import           Data.Maybe (fromJust)
 import           Prelude hiding (lookup)
-import           Data.Sequence (lookup, Seq, fromList)
-import           Dbg (printM)
-import           Data.Traversable (for)
+import           Data.Sequence (lookup)
 import           Control.Monad.Error.Class (MonadError(throwError))
 import           Errors (RTError(NonApplicableType))
 import           Data.List (transpose)
 import           Data.Functor ((<&>))
-import qualified Tm as V
-import qualified Data.List as Data.Sequence
 import           Data.Foldable (Foldable(toList))
 
 unify :: Ty -> Ty -> TmState ()

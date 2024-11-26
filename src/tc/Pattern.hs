@@ -9,7 +9,7 @@ module Pattern where
 
 import           Control.Monad (void, zipWithM_)
 import           Control.Monad.Error.Class (MonadError(throwError))
-import           State
+import           State (newTyVar, putVar, TmState)
 import           Tm (Pttrn(..), Ty(..))
 import           Prelude hiding (lookup)
 import           Errors (RTError(..))

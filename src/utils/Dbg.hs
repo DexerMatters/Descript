@@ -14,6 +14,9 @@ printInfo = putStrLn . makeLog Green "Info"
 printErr :: String -> IO ()
 printErr = putStrLn . makeLog Red "Error"
 
+printWarn :: String -> IO ()
+printWarn = putStrLn . makeLog Yellow "Warning"
+
 traceInfo :: (Show a) => a -> a
 traceInfo x = trace (makeLog Green "Info" (show x)) x
 
