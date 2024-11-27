@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 import           Data.Sequence (fromList)
-import           Text.RawString.QQ
+import           Text.RawString.QQ (r)
 import           Lib (check)
 import           Dbg (printInfo, printWarn)
 

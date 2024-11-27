@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
+{-# OPTIONS_GHC -Wno-missing-export-lists #-}
+
 module Unification where
 
 import           Control.Monad (zipWithM_)

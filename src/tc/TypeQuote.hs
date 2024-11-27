@@ -13,25 +13,28 @@ import           Data.Maybe (fromJust)
 import qualified Data.Sequence as Sequence
 import           Data.Functor ((<&>))
 import           Data.List (intercalate)
-import           Control.Monad (forM)
+import           Control.Monad (forM, unless)
+import           Control.Monad.Error.Class (MonadError(throwError))
+import           Errors (VTError(AmbiguousType))
 
 quote :: V.Ty -> ValState String
 quote = \case
   V.TyLam base i cls -> do
     let indices = [base .. base + i - 1]
     let vars = V.TyVar <$> indices
+    names <- mapM fresh indices
     let aux j = do
           constr <- gets (fromJust . Sequence.lookup j . V.constrs)
           if null constr
-            then fresh j
+            then pure []
             else do
-              n <- fresh j
               s <- forM constr
                 $ \case
                   Bot a -> eval a >>= quote
                   Top a -> eval a >>= quote
-              pure $ n ++ ":" ++ intercalate " ∩ " s
-    varTys <- mapM aux indices
+              pure $ ":" ++ intercalate " ∩ " s
+    tys <- mapM aux indices
+    let varTys = zipWith (++) names tys
     (cls $$ vars >>= quote) <&> ("∀" <> unwords varTys <> " => " ++)
   V.TyArrow [ty] ty' -> do
     tyQ' <- quote ty'
@@ -48,7 +51,12 @@ quote = \case
     tys' <- mapM (secondM quote) tys
     pure $ "{" ++ intercalate ", " (map (\(k, v) -> k ++ ":" ++ v) tys') ++ "}"
   V.TyPrim p         -> pure $ show p
-  V.TyVar i          -> fresh i
+  V.TyVar i          -> do
+    l0 <- gets (length . V.fresh)
+    name <- fresh i
+    l1 <- gets (length . V.fresh)
+    unless (l0 == l1) $ throwError $ AmbiguousType (V.TyVar i)
+    return name
   V.TyApp ty tys     -> do
     ty' <- quote ty
     tys' <- mapM quote tys

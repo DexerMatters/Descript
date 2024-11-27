@@ -20,7 +20,6 @@ import           Utils
 import           Data.List (lookup)
 import           Errors (RTError(NonProjectableType, UnboundVar, DissatisfiedParameterCount,
         MissingLabel))
-import           Dbg
 
 infer :: R.Tm -> TmState T.Ty
 infer = \case

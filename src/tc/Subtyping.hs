@@ -5,7 +5,7 @@
 
 module Subtyping where
 
-import           Control.Monad (unless, zipWithM, forM)
+import           Control.Monad (unless, zipWithM, forM, (>=>))
 import           Control.Monad.State (gets, MonadState(put, get))
 import           Data.Maybe (fromJust, fromMaybe, catMaybes)
 import           Data.Sequence (lookup)
@@ -106,12 +106,19 @@ ty <: V.TyLam base i cls = do
   ty <: ret
 _ <: _ = pure False
 
+evalStrict :: T.Ty -> ValState V.Ty
+evalStrict = eval
+  >=> \case
+    V.TyVar x -> throwError $ AmbiguousType (V.TyVar x)
+    ty        -> pure ty
+
 type DeductionTree = Tree (Maybe V.Ty)
 
 -- | Deduce the type with the given type and evidence
 deduce :: V.Ty -> V.Ty -> ValState DeductionTree
 deduce = curry
   $ \case
+    (V.TyVar _, V.TyVar _) -> pure $ Node Nothing []
     (V.TyVar i, t) -> do
       constrs <- gets (fromJust . lookup i . V.constrs)
       b <- fmap and
