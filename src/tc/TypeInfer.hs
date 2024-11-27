@@ -20,6 +20,7 @@ import           Utils
 import           Data.List (lookup)
 import           Errors (RTError(NonProjectableType, UnboundVar, DissatisfiedParameterCount,
         MissingLabel))
+import           Dbg
 
 infer :: R.Tm -> TmState T.Ty
 infer = \case
@@ -60,32 +61,37 @@ infer = \case
         else T.TyLam l0 count $ T.TyArrow tys retT
   R.App f arg       -> do
     -- First arg of T.TyReduce is the evidence of deduction
-    fT <- infer f
+    fTy <- infer f
     argT <- mapM infer arg
-    case fT of
-      T.TyArrow argT' retT
-        | length argT' == length argT -> zipWithM_ unify argT' argT
-          >> pure (T.TyApp retT argT argT')
-        | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
-      T.TyLam _ _ (T.TyArrow argT' retT)
-        | length argT' == length argT -> zipWithM_ unify argT' argT
-          >> pure (T.TyApp retT argT argT')
-        | otherwise -> throwError $ DissatisfiedParameterCount (length argT)
-      T.TyVar x _ -> do
-        b <- isLocked x
-        if b
-          then do
-            constrs <- collectArgConstrs x
-            constrs' <- collectRetConstrs x
-            vars <- mapM newTyVarWithConstr constrs
-            ret <- newTyVarWithConstr constrs'
-            return
-              $ T.TyApp (uncurry T.TyVar ret) argT (uncurry T.TyVar <$> vars)
-          else do
-            tvar <- newTyVar <&> uncurry T.TyVar
-            restrict (Bot $ T.TyArrow argT tvar) x
-            return tvar
-      _ -> error "App"
+    let aux fT = case fT of
+          T.TyArrow argT' retT
+            | length argT' == length argT -> zipWithM_ unify argT' argT
+              >> pure (T.TyApp retT argT argT')
+            | otherwise -> throwError
+              $ DissatisfiedParameterCount (length argT)
+          T.TyLam _ _ ty -> aux ty
+          T.TyVar x _ -> do
+            b <- isLocked x
+            if b
+              then do
+                constrs <- collectArgConstrs x
+                constrs' <- collectRetConstrs x
+                vars <- mapM newTyVarWithConstr constrs
+                ret <- newTyVarWithConstr constrs'
+                return
+                  $ T.TyApp
+                    (uncurry T.TyVar ret)
+                    argT
+                    (uncurry T.TyVar <$> vars)
+              else do
+                tvar <- newTyVar <&> uncurry T.TyVar
+                restrict (Bot $ T.TyArrow argT tvar) x
+                return tvar
+          T.TyApp arr a a' -> do
+            arr' <- aux arr
+            return $ T.TyApp arr' a a'
+          _ -> error "Non-applicable type"
+    aux fTy
   R.Ann tm ty       -> do
     ty' <- liftType ty
     tmT <- infer tm

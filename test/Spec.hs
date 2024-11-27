@@ -44,21 +44,29 @@ main = do
   printWarn ">>> Case 8 - High-Order Function <<<"
   check
     [r|
-      let f = (x: (Number) -> Bool) => x(1)
-      let main = f((x: Number) => true)
+      let f = (x, y) => (z) => [x, y, x]
+      let main = (f(1, "hello"))(true)
     |]
   printWarn ">>> Case 9 - Let Polymorphism <<<"
   check
     [r|
-      let main = 
+      let main = (
         let f = (x) => x
         let v = f(1)
         f(v)
+      )
     |]
-  printWarn ">>> Case 10 - High-Rank Polymorphism <<<"
+  printWarn ">>> Case 10 - Function Constraint Polymorphism <<<"
   check
     [r|
       let g = (f) => {f(12); f(true)}
       let h = (x) => x
       let main = [g(h), g]
+    |]
+  printWarn ">>> Case 11 - Mutual Deduction <<<"
+  check
+    [r|
+      let f = (x, a) => x(a)
+      let g = (x) => (x)
+      let main = [f(g, 12), f]
     |]

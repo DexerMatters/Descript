@@ -37,8 +37,6 @@ eval = \case
     printM $ "TyApp: " ++ show args ++ " " ++ show holedArgs
     deduced <- zipWithM deduce holedArgs args
     printM $ "Deduced: " ++ drawForest (fmap (fmap show) deduced)
-    types <- gets V.types
-    printM $ "Types: " ++ show types
     realArgs <- bool
       {- Deduction with known args -}
       (catMaybes . concat . levels . Node Nothing
@@ -46,6 +44,7 @@ eval = \case
       {- Deduction without known args (Self-Deduction) -}
       (pure args)
       (null holedArgs)
+    printM $ "Real args: " ++ show realArgs
     -- Evaluate the type with the yielded arguments
     isolate $ putTypes realArgs >> eval ty
   T.TyCast ty ty'     -> do
@@ -113,7 +112,6 @@ type DeductionTree = Tree (Maybe V.Ty)
 deduce :: V.Ty -> V.Ty -> ValState DeductionTree
 deduce = curry
   $ \case
-    (V.TyVar _, V.TyVar _) -> return $ Node Nothing []
     (V.TyVar i, t) -> do
       constrs <- gets (fromJust . lookup i . V.constrs)
       b <- fmap and
