@@ -32,7 +32,7 @@ quote = \case
                   Top a -> eval a >>= quote
               pure $ n ++ ":" ++ intercalate " ∩ " s
     varTys <- mapM aux indices
-    (cls $$ vars >>= quote) <&> ("∀" <> intercalate ", " varTys <> ".\n" ++)
+    (cls $$ vars >>= quote) <&> ("∀" <> unwords varTys <> " => " ++)
   V.TyArrow [ty] ty' -> do
     tyQ' <- quote ty'
     tyQ <- quote ty

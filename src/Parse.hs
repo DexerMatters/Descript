@@ -6,14 +6,8 @@ import           Control.Applicative (optional, (<|>))
 import           Control.Exception ()
 import           Data.Functor (($>))
 import           Data.Void (Void)
-import Raw
-    ( Def(..),
-      Lit(..),
-      Prog(Prog),
-      Pttrn(..),
-      Tm(..),
-      Ty(..),
-      Prim(..) )
+import           Raw (Def(..), Lit(..), Prog(Prog), Pttrn(..), Tm(..), Ty(..)
+                    , Prim(..))
 import           Text.Megaparsec (MonadParsec(notFollowedBy, try), Parsec
                                 , anySingleBut, between, choice, many, sepBy
                                 , some)
@@ -84,7 +78,7 @@ parseProg :: Parser Prog
 parseProg = Prog <$> many parseDef
 
 parseDef :: Parser Def
-parseDef = choice [pValDef, pTyLet, pFuncDef, pEnumDef]
+parseDef = ws *> choice [pValDef, pTyLet, pFuncDef, pEnumDef]
 
 pValDef :: Parser Def
 pValDef = ValDef <$> (symbol "let" *> lexeme camelCase)
