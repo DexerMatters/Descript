@@ -67,6 +67,6 @@ main = do
   check
     [r|
       let f = (x, a) => x(a)
-      let g = (x) => (x)
+      let g = (x) => x
       let main = [f(g, 12), f]
     |]

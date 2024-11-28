@@ -77,15 +77,15 @@ infer = \case
                 constrs' <- collectRetConstrs x
                 vars <- mapM newTyVarWithConstr constrs
                 ret <- newTyVarWithConstr constrs'
-                return
-                  $ T.TyApp
-                    (uncurry T.TyVar ret)
-                    argT
-                    (uncurry T.TyVar <$> vars)
+                let argT' = uncurry T.TyVar <$> vars
+                zipWithM_ unify argT' argT
+                return $ T.TyApp (uncurry T.TyVar ret) argT argT'
               else do
-                tvar <- newTyVar <&> uncurry T.TyVar
-                restrict (Bot $ T.TyArrow argT tvar) x
-                return tvar
+                retT <- newTyVar <&> uncurry T.TyVar
+                argT' <- mapM (const (newTyVar <&> uncurry T.TyVar)) argT
+                zipWithM_ unify argT' argT
+                restrict (Bot $ T.TyArrow argT retT) x
+                return $ T.TyApp retT argT argT'
           T.TyApp arr a a' -> do
             arr' <- aux arr
             return $ T.TyApp arr' a a'

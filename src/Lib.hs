@@ -34,7 +34,7 @@ check input = do
       case runTmState defs (infer (terms defs !!! "main")) of
         (Left err, _)   -> printErr $ show err
         (Right ty, ctx) -> do
-          case runValState ctx (eval ty >>= quote) of
+          case runValState ctx (eval ty >>= quote True) of
             (Left err, _) -> printErr $ show err
             (Right ty, _) -> do
               printInfo "Evaluated type:"
