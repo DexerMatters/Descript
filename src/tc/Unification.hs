@@ -21,9 +21,11 @@ import           Data.Foldable (Foldable(toList))
 unify :: Ty -> Ty -> TmState ()
 unify = curry
   $ \case
-    (TyVar i _, TyVar j _) -> do
-      constrs' <- gets (fromJust . lookup j . constrs)
-      mapM_ (`restrict` i) (elems constrs')
+    (TyVar i _, TyVar j _)
+      | i /= j -> do
+        constrs' <- gets (fromJust . lookup j . constrs)
+        mapM_ (`restrict` i) (elems constrs')
+      | otherwise -> pure ()
     (TyVar i _, ty) -> restrict (Bot ty) i
     (ty, TyVar i _) -> restrict (Top ty) i
     ( TyApp ty tys _
@@ -56,5 +58,7 @@ collectRetConstrs i = do
     $ fmap
     $ \case
       TyArrow _ ty -> pure ty
-      TyLam _ _ (TyArrow _ ty) -> pure ty
+      TyLam b l (TyArrow _ ty) -> pure (TyLam b l ty)
       ty -> throwError $ NonApplicableType ty
+
+

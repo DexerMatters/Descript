@@ -20,6 +20,8 @@ import           Utils
 import           Data.List (lookup)
 import           Errors (RTError(NonProjectableType, UnboundVar, DissatisfiedParameterCount,
         MissingLabel))
+import           Dbg (printM)
+import           Control.Monad.State.Lazy (modify)
 
 infer :: R.Tm -> TmState T.Ty
 infer = \case
@@ -54,7 +56,7 @@ infer = \case
     -- so that they are not affected by the other scopes
     mapM_ lockConstr [l0 .. l1 - 1]
     -- Consider whether to introduce a type lambda
-    pure
+    return
       $ if count == 0
         then T.TyArrow tys retT
         else T.TyLam l0 count $ T.TyArrow tys retT
@@ -69,6 +71,9 @@ infer = \case
             | otherwise -> throwError
               $ DissatisfiedParameterCount (length argT)
           T.TyLam _ _ ty -> aux ty
+          T.TyApp ty tys tys' -> do
+            ty' <- aux ty
+            return $ T.TyApp ty' tys tys'
           T.TyVar x _ -> do
             b <- isLocked x
             if b
@@ -81,19 +86,18 @@ infer = \case
                 zipWithM_ unify argT' argT
                 return $ T.TyApp (uncurry T.TyVar ret) argT argT'
               else do
-                retT <- newTyVar <&> uncurry T.TyVar
-                argT' <- mapM (const (newTyVar <&> uncurry T.TyVar)) argT
-                zipWithM_ unify argT' argT
-                restrict (Bot $ T.TyArrow argT retT) x
-                return $ T.TyApp retT argT argT'
-          T.TyApp arr a a' -> do
-            arr' <- aux arr
-            return $ T.TyApp arr' a a'
+                ret <- newTyVar <&> uncurry T.TyVar
+                printM $ "App: " ++ show ret
+                let lam = T.TyArrow argT ret
+                printM $ "App: " ++ show lam
+                restrict (Bot lam) x
+                return $ T.TyApp ret argT []
           _ -> error "Non-applicable type"
     aux fTy
   R.Ann tm ty       -> do
     ty' <- liftType ty
     tmT <- infer tm
+    printM $ "Ann: " ++ show tmT ++ " <: " ++ show ty'
     unify tmT ty'
     pure $ T.TyCast tmT ty'
   R.Tuple tms       -> T.TyTuple <$> mapM infer tms
@@ -120,8 +124,18 @@ infer = \case
     mapM_ infer (init tms)
     infer (last tms)
   R.Let p rhs body  -> do
-    rhsT <- infer rhs
+    rhsT <- isolate' $ infer rhs
+    l0 <- gets (length . T.constrs)
     liftPattern p >>= flip checkFromPattern rhsT
+    l1 <- gets (length . T.constrs)
+    mapM_ lockConstr [l0 .. l1 - 1]
     updateLevel
     infer body
   R.Macro _ _       -> error "Macro types"
+  where
+    isolate' :: TmState a -> TmState a
+    isolate' f = do
+      vars0 <- gets T.vars
+      a <- f
+      _ <- modify $ \s -> s { T.vars = vars0 }
+      return a

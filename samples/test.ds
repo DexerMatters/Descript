@@ -1,4 +1,5 @@
 let main = (
-  let fuck = (a) => if (a.x) { a.y as Number } else { a.z }
-  fuck
+  let dollar = (f, a) => f(a, a)
+  let id = (x, y) => (a, b) => [a, x, b, y]
+  (id(1, true))("hi", 12)
 )

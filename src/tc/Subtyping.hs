@@ -7,7 +7,7 @@ module Subtyping where
 
 import           Control.Monad (unless, zipWithM, forM, (>=>))
 import           Control.Monad.State (gets, MonadState(put, get))
-import           Data.Maybe (fromJust, fromMaybe, catMaybes)
+import           Data.Maybe (fromJust, catMaybes)
 import           Data.Sequence (lookup)
 import           State (ValState, isolate, putTypes)
 import qualified Tm as T
@@ -20,11 +20,16 @@ import           Dbg (printM)
 import           Data.Graph (Tree(Node))
 import           Data.Tree (levels, drawForest)
 import           Errors (VTError(..))
+import           Data.Foldable (Foldable(toList))
 
 eval :: T.Ty -> ValState V.Ty
 eval = \case
   T.TyPrim p          -> pure $ V.TyPrim p
-  T.TyVar i l         -> gets $ fromMaybe (V.TyVar i) . lookup l . V.types
+  T.TyVar i l         -> do
+    ty <- gets $ lookup l . V.types
+    case ty of
+      Just ty -> deep ty
+      Nothing -> pure $ V.TyVar i
   T.TyArrow tys ty    -> V.TyArrow <$> mapM eval tys <*> eval ty
   T.TyTuple tys       -> V.TyTuple <$> mapM eval tys
   T.TyRcd tys         -> V.TyRcd <$> mapM (secondM eval) tys
@@ -44,7 +49,9 @@ eval = \case
       {- Deduction without known args (Self-Deduction) -}
       (pure args)
       (null holedArgs)
-    printM $ "Real args: " ++ show realArgs
+    types <- gets V.types
+    printM $ "Real args: " ++ show (toList types <> realArgs)
+    printM $ "Function: " ++ show ty
     -- Evaluate the type with the yielded arguments
     isolate $ putTypes realArgs >> eval ty
   T.TyCast ty ty'     -> do
@@ -118,7 +125,7 @@ type DeductionTree = Tree (Maybe V.Ty)
 deduce :: V.Ty -> V.Ty -> ValState DeductionTree
 deduce = curry
   $ \case
-    (V.TyVar _, V.TyVar _) -> pure $ Node Nothing []
+    (V.TyVar _, V.TyVar _) -> return $ Node Nothing []
     (V.TyVar i, t) -> do
       constrs <- gets (fromJust . lookup i . V.constrs)
       b <- fmap and
@@ -138,18 +145,33 @@ deduce = curry
       <$> sequence
         [deduce ty ty' | (l, ty) <- flds, (l', ty') <- flds', l == l']
     (V.TyArrow tys ty, V.TyArrow tys' ty') -> do
-      args <- zipWithM deduce tys' tys
       ret <- deduce ty ty'
-      return $ Node Nothing $ args ++ [ret]
+      args <- zipWithM deduce tys' tys
+      return $ Node Nothing $ ret:args
     (V.TyLam base i cls, ty) -> do
       let vars = V.TyVar <$> [base .. base + i - 1]
       ret <- cls $$ vars
-      printM $ "Deduce: " ++ show ret ++ " <: " ++ show ty
       deduce ret ty
     (ty, V.TyLam base i cls) -> do
       let vars = V.TyVar <$> [base .. base + i - 1]
       ret <- cls $$ vars
-      printM $ "Deduce: " ++ show ty ++ " <: " ++ show ret
       deduce ty ret
     (ty, ty') -> ty' <: ty
       >>= bool (throwError $ BadCast ty' ty) (return $ Node Nothing [])
+
+deep :: V.Ty -> ValState V.Ty
+deep = \case
+  V.TyTuple tys -> V.TyTuple <$> mapM deep tys
+  V.TyRcd flds -> V.TyRcd <$> mapM (secondM deep) flds
+  V.TyArrow tys ty -> V.TyArrow <$> mapM deep tys <*> deep ty
+  V.TyApp ty tys -> V.TyApp <$> deep ty <*> mapM deep tys
+  V.TyLam base i cls -> do
+    let vars = V.TyVar <$> [base .. base + i - 1]
+    ret <- cls $$ vars
+    deep ret
+  V.TyVar i -> do
+    types <- gets (lookup i . V.types)
+    case types of
+      Just ty -> deep ty
+      Nothing -> pure $ V.TyVar i
+  ty -> pure ty

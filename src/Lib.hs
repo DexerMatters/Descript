@@ -17,9 +17,13 @@ import           Raw (Symbols(terms))
 import           Utils
 import           TypeQuote (quote)
 
+path :: String
+path = "/home/dexer/Repos/haskell/descript/samples/test.ds"
+
 someFunc :: IO ()
 someFunc = do
-  printInfo "Hello, world!"
+  code <- readFile path
+  check code
 
 check :: String -> IO ()
 check input = do
@@ -34,8 +38,10 @@ check input = do
       case runTmState defs (infer (terms defs !!! "main")) of
         (Left err, _)   -> printErr $ show err
         (Right ty, ctx) -> do
-          case runValState ctx (eval ty >>= quote True) of
+          printInfo "Inferred type:"
+          putStrLn $ "\t<<< " <> show ty
+          case runValState ctx (eval ty) of
             (Left err, _) -> printErr $ show err
             (Right ty, _) -> do
               printInfo "Evaluated type:"
-              putStrLn $ "\t<<< " <> ty
+              putStrLn $ "\t<<< " <> show ty
